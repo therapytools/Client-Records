@@ -1,0 +1,27 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "dialog:allow-save",
+    "fs:default",
+    "fs:allow-write-text-file",
+    "opener:default",
+    "sql:default",
+    "sql:allow-execute",
+    "store:default",
+    "http:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "http://localhost:11434/*" },
+        { "url": "https://*.googleapis.com/*" }
+      ]
+    }
+  ]
+}

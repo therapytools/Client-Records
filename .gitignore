@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+__pycache__/
+*.pyc
+tauri-app/node_modules/
+tauri-app/src-tauri/target/
+tauri-app/dist/

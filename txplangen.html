@@ -1,0 +1,2758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Treatment Plan Generator</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Inter font (Local) -->
+    <link rel="stylesheet" href="css/fonts.css">
+    
+    <style>
+        /* Use Inter font family */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Custom styles for generated content */
+        .goal, .objective {
+            transition: background-color 0.2s ease-in-out;
+        }
+
+        .goal-text, .objective-text {
+            cursor: pointer;
+        }
+
+        .goal-text:hover, .objective-text:hover {
+            @apply bg-gray-50;
+        }
+
+        /* Custom Toast Notification for 'Copied' */
+        #clipboard-toast {
+            position: fixed;
+            bottom: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            transition: bottom 0.5s ease-in-out;
+            z-index: 100;
+        }
+
+        #clipboard-toast.show {
+            bottom: 30px;
+        }
+
+        /* Custom Error Modal */
+        #error-modal {
+            display: none; /* Hidden by default */
+            z-index: 200;
+        }
+
+        /* Loading Spinner */
+        #loader {
+            border-top-color: #3498db;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-900">
+
+    <div class="container mx-auto max-w-4xl p-4 sm:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">Treatment Plan Generator</h1>
+            <p class="text-lg text-gray-600">Generate clinical treatment plans using AI</p>
+        </header>
+
+        <!-- Main Content Wrapper -->
+        <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-lg">
+
+            <!-- API Configuration Section -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 items-end">
+                <div>
+                    <label for="api-select" class="block text-sm font-medium text-gray-700 mb-1">Select AI Provider</label>
+                    <select id="api-select" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        <option value="gemini">Google Gemini</option>
+                        <option value="vertex">Google Vertex AI</option>
+                        <option value="chatgpt">OpenAI (ChatGPT)</option>
+                        <option value="open-webui">Open WebUI</option>
+                    </select>
+                </div>
+                <div id="model-select-container" class="hidden">
+                    <label for="model-select" class="block text-sm font-medium text-gray-700 mb-1">Select Model</label>
+                    <select id="model-select" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        <!-- Models will be populated by JS -->
+                    </select>
+                </div>
+                <div>
+                    <label for="api-key" class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                    <input type="password" id="api-key" placeholder="Enter your API Key" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div id="api-url-container" class="hidden">
+                    <label for="api-url" class="block text-sm font-medium text-gray-700 mb-1">API Base URL</label>
+                    <input type="text" id="api-url" placeholder="e.g., http://localhost:8000" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div id="vertex-project-container" class="hidden">
+                    <label for="vertex-project-id" class="block text-sm font-medium text-gray-700 mb-1">Vertex Project ID</label>
+                    <input type="text" id="vertex-project-id" placeholder="e.g., my-gcp-project" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div id="vertex-location-container" class="hidden">
+                    <label for="vertex-location" class="block text-sm font-medium text-gray-700 mb-1">Vertex Location</label>
+                    <input type="text" id="vertex-location" value="us-central1" placeholder="e.g., us-central1" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div id="vertex-proxy-container" class="hidden">
+                    <label for="vertex-proxy-url" class="block text-sm font-medium text-gray-700 mb-1">Vertex Proxy URL (optional)</label>
+                    <input type="text" id="vertex-proxy-url" placeholder="e.g., http://localhost:8787" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <button id="save-api-btn" class="w-full flex items-center justify-center px-4 py-3 bg-gray-600 text-white text-sm font-medium rounded-lg shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v12l-5-3.5L5 16V4z" />
+                        </svg>
+                        Save Settings
+                    </button>
+                </div>
+            </div>
+
+            <!-- Input Form Section -->
+            <div class="space-y-6">
+                <!-- Treatment Plan Focus -->
+                <div>
+                    <label for="treatment-focus" class="block text-sm font-medium text-gray-700 mb-1">Treatment Plan Focus</label>
+                    <textarea id="treatment-focus" rows="5" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., Client presents with symptoms of anxiety and depression, difficulty managing interpersonal relationships, and reports low self-esteem..."></textarea>
+                </div>
+
+                <!-- Diagnoses Section -->
+                <div>
+                    <label for="diagnosis-search" class="block text-sm font-medium text-gray-700 mb-2">Diagnoses</label>
+                    <div class="relative">
+                        <input 
+                            type="text" 
+                            id="diagnosis-search" 
+                            placeholder="Search diagnoses (e.g., Depressive, Anxiety, Bipolar)..." 
+                            class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                            autocomplete="off"
+                        >
+                        <div id="diagnosis-dropdown" class="hidden absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                            <!-- Filtered options will appear here -->
+                        </div>
+                    </div>
+                    <div id="selected-diagnoses" class="mt-3 flex flex-wrap gap-2">
+                        <!-- Selected diagnosis tags will appear here -->
+                    </div>
+                </div>
+
+                <!-- Modalities Section -->
+                <div>
+                    <label for="modality-search" class="block text-sm font-medium text-gray-700 mb-2">Modalities</label>
+                    <div class="relative">
+                        <input 
+                            type="text" 
+                            id="modality-search" 
+                            placeholder="Search modalities (e.g., CBT, DBT, EMDR)..." 
+                            class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                            autocomplete="off"
+                        >
+                        <div id="modality-dropdown" class="hidden absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                            <!-- Filtered options will appear here -->
+                        </div>
+                    </div>
+                    <div id="selected-modalities" class="mt-3 flex flex-wrap gap-2">
+                        <!-- Selected modality tags will appear here -->
+                    </div>
+                </div>
+
+                <!-- Goals & Objectives Settings -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="goals-per-diag" class="block text-sm font-medium text-gray-700 mb-1">Goals per diagnosis</label>
+                        <input type="number" id="goals-per-diag" value="2" min="1" max="10" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label for="objectives-per-goal" class="block text-sm font-medium text-gray-700 mb-1">Objectives per goal</label>
+                        <input type="number" id="objectives-per-goal" value="3" min="1" max="10" class="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+
+                <!-- Generate Button -->
+                <div class="text-center pt-4">
+                    <button id="generate-btn" class="w-full md:w-1/2 flex items-center justify-center px-6 py-3 bg-blue-600 text-white text-lg font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all">
+                        <svg id="generate-icon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707m12.728 0l-.707.707M12 21v-1m0-16a1 1 0 00-1 1v2.069a8 8 0 100 11.862V19a1 1 0 001 1z" />
+                        </svg>
+                        <div id="loader" class="hidden w-5 h-5 mr-2 rounded-full border-2 border-white" style="border-top-color: transparent; animation: spin 0.8s linear infinite;"></div>
+                        <span id="generate-btn-text">Generate Plan</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Output Section -->
+        <div id="output-section" class="hidden bg-white p-6 sm:p-8 rounded-2xl shadow-lg mt-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">Generated Treatment Plan</h2>
+            <div id="plan-container" class="space-y-6">
+                <!-- Generated plan will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Clipboard Toast -->
+    <div id="clipboard-toast" class="bg-gray-900 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-lg">
+        Copied to clipboard!
+    </div>
+    <div id="settings-saved-toast" class="hidden fixed bottom-10 left-1/2 -translate-x-1/2 bg-green-600 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-lg z-100">
+        API Settings Saved!
+    </div>
+
+    <!-- Error Modal -->
+    <div id="error-modal" class="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center p-4">
+        <div class="bg-white max-w-sm w-full p-6 rounded-lg shadow-xl">
+            <div class="flex justify-between items-center">
+                <h3 class="text-lg font-medium text-red-600">Error</h3>
+                <button id="close-error-modal" class="text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <p id="error-message" class="mt-2 text-sm text-gray-700">An error occurred.</p>
+            <button id="ok-error-modal" class="w-full mt-4 px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                OK
+            </button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- CONSTANTS ---
+            
+            // Comprehensive list of ICD-10 mental health diagnoses
+            const ICD10_CODES = {
+                "F01": "Vascular dementia",
+                "F01.5": "Vascular dementia, unspecified severity",
+                "F01.50": "Vascular dementia, unspecified severity, without behavioral disturbance, psychotic disturbance, mood disturbance, and anxiety",
+                "F01.51": "Vascular dementia, unspecified severity, with behavioral disturbance",
+                "F01.511": "Vascular dementia, unspecified severity, with agitation",
+                "F01.518": "Vascular dementia, unspecified severity, with other behavioral disturbance",
+                "F01.52": "Vascular dementia, unspecified severity, with psychotic disturbance",
+                "F01.53": "Vascular dementia, unspecified severity, with mood disturbance",
+                "F01.54": "Vascular dementia, unspecified severity, with anxiety",
+                "F01.A": "Vascular dementia, mild",
+                "F01.A0": "Vascular dementia, mild, without behavioral disturbance, psychotic disturbance, mood disturbance, and anxiety",
+                "F01.A1": "Vascular dementia, mild, with behavioral disturbance",
+                "F01.A11": "Vascular dementia, mild, with agitation",
+                "F01.A18": "Vascular dementia, mild, with other behavioral disturbance",
+                "F01.A2": "Vascular dementia, mild, with psychotic disturbance",
+                "F01.A3": "Vascular dementia, mild, with mood disturbance",
+                "F01.A4": "Vascular dementia, mild, with anxiety",
+                "F01.B": "Vascular dementia, moderate",
+                "F01.B0": "Vascular dementia, moderate, without behavioral disturbance, psychotic disturbance, mood disturbance, and anxiety",
+                "F01.B1": "Vascular dementia, moderate, with behavioral disturbance",
+                "F01.B11": "Vascular dementia, moderate, with agitation",
+                "F01.B18": "Vascular dementia, moderate, with other behavioral disturbance",
+                "F01.B2": "Vascular dementia, moderate, with psychotic disturbance",
+                "F01.B3": "Vascular dementia, moderate, with mood disturbance",
+                "F01.B4": "Vascular dementia, moderate, with anxiety",
+                "F01.C": "Vascular dementia, severe",
+                "F01.C0": "Vascular dementia, severe, without behavioral disturbance, psychotic disturbance, mood disturbance, and anxiety",
+                "F01.C1": "Vascular dementia, severe, with behavioral disturbance",
+                "F01.C11": "Vascular dementia, severe, with agitation",
+                "F01.C18": "Vascular dementia, severe, with other behavioral disturbance",
+                "F01.C2": "Vascular dementia, severe, with psychotic disturbance",
+                "F01.C3": "Vascular dementia, severe, with mood disturbance",
+                "F01.C4": "Vascular dementia, severe, with anxiety",
+                "F02": "Dementia in other diseases classified elsewhere",
+                "F02.8": "Dementia in other diseases classified elsewhere, unspecified severity",
+                "F02.80": "Dementia in other diseases classified elsewhere, unspecified severity, without behavioral disturbance, psychotic disturbance, mood disturbance, and anxiety",
+                "F02.81": "Dementia in other diseases classified elsewhere, unspecified severity, with behavioral disturbance",
+                "F02.811": "Dementia in other diseases classified elsewhere, unspecified severity, with agitation",
+                "F02.818": "Dementia in other diseases classified elsewhere, unspecified severity, with other behavioral disturbance",
+                "F02.82": "Dementia in other diseases classified elsewhere, unspecified severity, with psychotic disturbance",
+                "F02.83": "Dementia in other diseases classified elsewhere, unspecified severity, with mood disturbance",
+                "F02.84": "Dementia in other diseases classified elsewhere, unspecified severity, with anxiety",
+                "F02.A": "Dementia in other diseases classified elsewhere, mild",
+                "F02.A0": "Dementia in other diseases classified elsewhere, mild, without behavioral disturbance, psychotic disturbance, mood disturbance, and anxiety",
+                "F02.A1": "Dementia in other diseases classified elsewhere, mild, with behavioral disturbance",
+                "F02.A11": "Dementia in other diseases classified elsewhere, mild, with agitation",
+                "F02.A18": "Dementia in other diseases classified elsewhere, mild, with other behavioral disturbance",
+                "F02.A2": "Dementia in other diseases classified elsewhere, mild, with psychotic disturbance",
+                "F02.A3": "Dementia in other diseases classified elsewhere, mild, with mood disturbance",
+                "F02.A4": "Dementia in other diseases classified elsewhere, mild, with anxiety",
+                "F02.B": "Dementia in other diseases classified elsewhere, moderate",
+                "F02.B0": "Dementia in other diseases classified elsewhere, moderate, without behavioral disturbance, psychotic disturbance, mood disturbance, and anxiety",
+                "F02.B1": "Dementia in other diseases classified elsewhere, moderate, with behavioral disturbance",
+                "F02.B11": "Dementia in other diseases classified elsewhere, moderate, with agitation",
+                "F02.B18": "Dementia in other diseases classified elsewhere, moderate, with other behavioral disturbance",
+                "F02.B2": "Dementia in other diseases classified elsewhere, moderate, with psychotic disturbance",
+                "F02.B3": "Dementia in other diseases classified elsewhere, moderate, with mood disturbance",
+                "F02.B4": "Dementia in other diseases classified elsewhere, moderate, with anxiety",
+                "F02.C": "Dementia in other diseases classified elsewhere, severe",
+                "F02.C0": "Dementia in other diseases classified elsewhere, severe, without behavioral disturbance, psychotic disturbance, mood disturbance, and anxiety",
+                "F02.C1": "Dementia in other diseases classified elsewhere, severe, with behavioral disturbance",
+                "F02.C11": "Dementia in other diseases classified elsewhere, severe, with agitation",
+                "F02.C18": "Dementia in other diseases classified elsewhere, severe, with other behavioral disturbance",
+                "F02.C2": "Dementia in other diseases classified elsewhere, severe, with psychotic disturbance",
+                "F02.C3": "Dementia in other diseases classified elsewhere, severe, with mood disturbance",
+                "F02.C4": "Dementia in other diseases classified elsewhere, severe, with anxiety",
+                "F03": "Unspecified dementia",
+                "F03.9": "Unspecified dementia, unspecified severity",
+                "F03.90": "Unspecified dementia, unspecified severity, without behavioral disturbance, psychotic disturbance, mood disturbance, and anxiety",
+                "F03.91": "Unspecified dementia, unspecified severity, with behavioral disturbance",
+                "F03.911": "Unspecified dementia, unspecified severity, with agitation",
+                "F03.918": "Unspecified dementia, unspecified severity, with other behavioral disturbance",
+                "F03.92": "Unspecified dementia, unspecified severity, with psychotic disturbance",
+                "F03.93": "Unspecified dementia, unspecified severity, with mood disturbance",
+                "F03.94": "Unspecified dementia, unspecified severity, with anxiety",
+                "F03.A": "Unspecified dementia, mild",
+                "F03.A0": "Unspecified dementia, mild, without behavioral disturbance, psychotic disturbance, mood disturbance, and anxiety",
+                "F03.A1": "Unspecified dementia, mild, with behavioral disturbance",
+                "F03.A11": "Unspecified dementia, mild, with agitation",
+                "F03.A18": "Unspecified dementia, mild, with other behavioral disturbance",
+                "F03.A2": "Unspecified dementia, mild, with psychotic disturbance",
+                "F03.A3": "Unspecified dementia, mild, with mood disturbance",
+                "F03.A4": "Unspecified dementia, mild, with anxiety",
+                "F03.B": "Unspecified dementia, moderate",
+                "F03.B0": "Unspecified dementia, moderate, without behavioral disturbance, psychotic disturbance, mood disturbance, and anxiety",
+                "F03.B1": "Unspecified dementia, moderate, with behavioral disturbance",
+                "F03.B11": "Unspecified dementia, moderate, with agitation",
+                "F03.B18": "Unspecified dementia, moderate, with other behavioral disturbance",
+                "F03.B2": "Unspecified dementia, moderate, with psychotic disturbance",
+                "F03.B3": "Unspecified dementia, moderate, with mood disturbance",
+                "F03.B4": "Unspecified dementia, moderate, with anxiety",
+                "F03.C": "Unspecified dementia, severe",
+                "F03.C0": "Unspecified dementia, severe, without behavioral disturbance, psychotic disturbance, mood disturbance, and anxiety",
+                "F03.C1": "Unspecified dementia, severe, with behavioral disturbance",
+                "F03.C11": "Unspecified dementia, severe, with agitation",
+                "F03.C18": "Unspecified dementia, severe, with other behavioral disturbance",
+                "F03.C2": "Unspecified dementia, severe, with psychotic disturbance",
+                "F03.C3": "Unspecified dementia, severe, with mood disturbance",
+                "F03.C4": "Unspecified dementia, severe, with anxiety",
+                "F04": "Amnestic disorder due to known physiological condition",
+                "F05": "Delirium due to known physiological condition",
+                "F06": "Other mental disorders due to known physiological condition",
+                "F06.0": "Psychotic disorder with hallucinations due to known physiological condition",
+                "F06.1": "Catatonic disorder due to known physiological condition",
+                "F06.2": "Psychotic disorder with delusions due to known physiological condition",
+                "F06.3": "Mood disorder due to known physiological condition",
+                "F06.30": "Mood disorder due to known physiological condition, unspecified",
+                "F06.31": "Mood disorder due to known physiological condition with depressive features",
+                "F06.32": "Mood disorder due to known physiological condition with major depressive-like episode",
+                "F06.33": "Mood disorder due to known physiological condition with manic features",
+                "F06.34": "Mood disorder due to known physiological condition with mixed features",
+                "F06.4": "Anxiety disorder due to known physiological condition",
+                "F06.7": "Mild neurocognitive disorder due to known physiological condition",
+                "F06.70": "Mild neurocognitive disorder due to known physiological condition without behavioral disturbance",
+                "F06.71": "Mild neurocognitive disorder due to known physiological condition with behavioral disturbance",
+                "F06.8": "Other specified mental disorders due to known physiological condition",
+                "F07": "Personality and behavioral disorders due to known physiological condition",
+                "F07.0": "Personality change due to known physiological condition",
+                "F07.8": "Other personality and behavioral disorders due to known physiological condition",
+                "F07.81": "Postconcussional syndrome",
+                "F07.89": "Other personality and behavioral disorders due to known physiological condition",
+                "F07.9": "Unspecified personality and behavioral disorder due to known physiological condition",
+                "F09": "Unspecified mental disorder due to known physiological condition",
+                "F10": "Alcohol related disorders",
+                "F10.1": "Alcohol abuse",
+                "F10.10": "Alcohol abuse, uncomplicated",
+                "F10.11": "Alcohol abuse, in remission",
+                "F10.12": "Alcohol abuse with intoxication",
+                "F10.120": "Alcohol abuse with intoxication, uncomplicated",
+                "F10.121": "Alcohol abuse with intoxication delirium",
+                "F10.129": "Alcohol abuse with intoxication, unspecified",
+                "F10.13": "Alcohol abuse, with withdrawal",
+                "F10.130": "Alcohol abuse with withdrawal, uncomplicated",
+                "F10.131": "Alcohol abuse with withdrawal delirium",
+                "F10.132": "Alcohol abuse with withdrawal with perceptual disturbance",
+                "F10.139": "Alcohol abuse with withdrawal, unspecified",
+                "F10.14": "Alcohol abuse with alcohol-induced mood disorder",
+                "F10.15": "Alcohol abuse with alcohol-induced psychotic disorder",
+                "F10.150": "Alcohol abuse with alcohol-induced psychotic disorder with delusions",
+                "F10.151": "Alcohol abuse with alcohol-induced psychotic disorder with hallucinations",
+                "F10.159": "Alcohol abuse with alcohol-induced psychotic disorder, unspecified",
+                "F10.18": "Alcohol abuse with other alcohol-induced disorders",
+                "F10.180": "Alcohol abuse with alcohol-induced anxiety disorder",
+                "F10.181": "Alcohol abuse with alcohol-induced sexual dysfunction",
+                "F10.182": "Alcohol abuse with alcohol-induced sleep disorder",
+                "F10.188": "Alcohol abuse with other alcohol-induced disorder",
+                "F10.19": "Alcohol abuse with unspecified alcohol-induced disorder",
+                "F10.2": "Alcohol dependence",
+                "F10.20": "Alcohol dependence, uncomplicated",
+                "F10.21": "Alcohol dependence, in remission",
+                "F10.22": "Alcohol dependence with intoxication",
+                "F10.220": "Alcohol dependence with intoxication, uncomplicated",
+                "F10.221": "Alcohol dependence with intoxication delirium",
+                "F10.229": "Alcohol dependence with intoxication, unspecified",
+                "F10.23": "Alcohol dependence with withdrawal",
+                "F10.230": "Alcohol dependence with withdrawal, uncomplicated",
+                "F10.231": "Alcohol dependence with withdrawal delirium",
+                "F10.232": "Alcohol dependence with withdrawal with perceptual disturbance",
+                "F10.239": "Alcohol dependence with withdrawal, unspecified",
+                "F10.24": "Alcohol dependence with alcohol-induced mood disorder",
+                "F10.25": "Alcohol dependence with alcohol-induced psychotic disorder",
+                "F10.250": "Alcohol dependence with alcohol-induced psychotic disorder with delusions",
+                "F10.251": "Alcohol dependence with alcohol-induced psychotic disorder with hallucinations",
+                "F10.259": "Alcohol dependence with alcohol-induced psychotic disorder, unspecified",
+                "F10.26": "Alcohol dependence with alcohol-induced persisting amnestic disorder",
+                "F10.27": "Alcohol dependence with alcohol-induced persisting dementia",
+                "F10.28": "Alcohol dependence with other alcohol-induced disorders",
+                "F10.280": "Alcohol dependence with alcohol-induced anxiety disorder",
+                "F10.281": "Alcohol dependence with alcohol-induced sexual dysfunction",
+                "F10.282": "Alcohol dependence with alcohol-induced sleep disorder",
+                "F10.288": "Alcohol dependence with other alcohol-induced disorder",
+                "F10.29": "Alcohol dependence with unspecified alcohol-induced disorder",
+                "F10.9": "Alcohol use, unspecified",
+                "F10.90": "Alcohol use, unspecified, uncomplicated",
+                "F10.91": "Alcohol use, unspecified, in remission",
+                "F10.92": "Alcohol use, unspecified with intoxication",
+                "F10.920": "Alcohol use, unspecified with intoxication, uncomplicated",
+                "F10.921": "Alcohol use, unspecified with intoxication delirium",
+                "F10.929": "Alcohol use, unspecified with intoxication, unspecified",
+                "F10.93": "Alcohol use, unspecified with withdrawal",
+                "F10.930": "Alcohol use, unspecified with withdrawal, uncomplicated",
+                "F10.931": "Alcohol use, unspecified with withdrawal delirium",
+                "F10.932": "Alcohol use, unspecified with withdrawal with perceptual disturbance",
+                "F10.939": "Alcohol use, unspecified with withdrawal, unspecified",
+                "F10.94": "Alcohol use, unspecified with alcohol-induced mood disorder",
+                "F10.95": "Alcohol use, unspecified with alcohol-induced psychotic disorder",
+                "F10.950": "Alcohol use, unspecified with alcohol-induced psychotic disorder with delusions",
+                "F10.951": "Alcohol use, unspecified with alcohol-induced psychotic disorder with hallucinations",
+                "F10.959": "Alcohol use, unspecified with alcohol-induced psychotic disorder, unspecified",
+                "F10.96": "Alcohol use, unspecified with alcohol-induced persisting amnestic disorder",
+                "F10.97": "Alcohol use, unspecified with alcohol-induced persisting dementia",
+                "F10.98": "Alcohol use, unspecified with other alcohol-induced disorders",
+                "F10.980": "Alcohol use, unspecified with alcohol-induced anxiety disorder",
+                "F10.981": "Alcohol use, unspecified with alcohol-induced sexual dysfunction",
+                "F10.982": "Alcohol use, unspecified with alcohol-induced sleep disorder",
+                "F10.988": "Alcohol use, unspecified with other alcohol-induced disorder",
+                "F10.99": "Alcohol use, unspecified with unspecified alcohol-induced disorder",
+                "F11": "Opioid related disorders",
+                "F11.1": "Opioid abuse",
+                "F11.10": "Opioid abuse, uncomplicated",
+                "F11.11": "Opioid abuse, in remission",
+                "F11.12": "Opioid abuse with intoxication",
+                "F11.120": "Opioid abuse with intoxication, uncomplicated",
+                "F11.121": "Opioid abuse with intoxication delirium",
+                "F11.122": "Opioid abuse with intoxication with perceptual disturbance",
+                "F11.129": "Opioid abuse with intoxication, unspecified",
+                "F11.13": "Opioid abuse with withdrawal",
+                "F11.14": "Opioid abuse with opioid-induced mood disorder",
+                "F11.15": "Opioid abuse with opioid-induced psychotic disorder",
+                "F11.150": "Opioid abuse with opioid-induced psychotic disorder with delusions",
+                "F11.151": "Opioid abuse with opioid-induced psychotic disorder with hallucinations",
+                "F11.159": "Opioid abuse with opioid-induced psychotic disorder, unspecified",
+                "F11.18": "Opioid abuse with other opioid-induced disorder",
+                "F11.181": "Opioid abuse with opioid-induced sexual dysfunction",
+                "F11.182": "Opioid abuse with opioid-induced sleep disorder",
+                "F11.188": "Opioid abuse with other opioid-induced disorder",
+                "F11.19": "Opioid abuse with unspecified opioid-induced disorder",
+                "F11.2": "Opioid dependence",
+                "F11.20": "Opioid dependence, uncomplicated",
+                "F11.21": "Opioid dependence, in remission",
+                "F11.22": "Opioid dependence with intoxication",
+                "F11.220": "Opioid dependence with intoxication, uncomplicated",
+                "F11.221": "Opioid dependence with intoxication delirium",
+                "F11.222": "Opioid dependence with intoxication with perceptual disturbance",
+                "F11.229": "Opioid dependence with intoxication, unspecified",
+                "F11.23": "Opioid dependence with withdrawal",
+                "F11.24": "Opioid dependence with opioid-induced mood disorder",
+                "F11.25": "Opioid dependence with opioid-induced psychotic disorder",
+                "F11.250": "Opioid dependence with opioid-induced psychotic disorder with delusions",
+                "F11.251": "Opioid dependence with opioid-induced psychotic disorder with hallucinations",
+                "F11.259": "Opioid dependence with opioid-induced psychotic disorder, unspecified",
+                "F11.28": "Opioid dependence with other opioid-induced disorder",
+                "F11.281": "Opioid dependence with opioid-induced sexual dysfunction",
+                "F11.282": "Opioid dependence with opioid-induced sleep disorder",
+                "F11.288": "Opioid dependence with other opioid-induced disorder",
+                "F11.29": "Opioid dependence with unspecified opioid-induced disorder",
+                "F11.9": "Opioid use, unspecified",
+                "F11.90": "Opioid use, unspecified, uncomplicated",
+                "F11.91": "Opioid use, unspecified, in remission",
+                "F11.92": "Opioid use, unspecified with intoxication",
+                "F11.920": "Opioid use, unspecified with intoxication, uncomplicated",
+                "F11.921": "Opioid use, unspecified with intoxication delirium",
+                "F11.922": "Opioid use, unspecified with intoxication with perceptual disturbance",
+                "F11.929": "Opioid use, unspecified with intoxication, unspecified",
+                "F11.93": "Opioid use, unspecified with withdrawal",
+                "F11.94": "Opioid use, unspecified with opioid-induced mood disorder",
+                "F11.95": "Opioid use, unspecified with opioid-induced psychotic disorder",
+                "F11.950": "Opioid use, unspecified with opioid-induced psychotic disorder with delusions",
+                "F11.951": "Opioid use, unspecified with opioid-induced psychotic disorder with hallucinations",
+                "F11.959": "Opioid use, unspecified with opioid-induced psychotic disorder, unspecified",
+                "F11.98": "Opioid use, unspecified with other specified opioid-induced disorder",
+                "F11.981": "Opioid use, unspecified with opioid-induced sexual dysfunction",
+                "F11.982": "Opioid use, unspecified with opioid-induced sleep disorder",
+                "F11.988": "Opioid use, unspecified with other opioid-induced disorder",
+                "F11.99": "Opioid use, unspecified with unspecified opioid-induced disorder",
+                "F12": "Cannabis related disorders",
+                "F12.1": "Cannabis abuse",
+                "F12.10": "Cannabis abuse, uncomplicated",
+                "F12.11": "Cannabis abuse, in remission",
+                "F12.12": "Cannabis abuse with intoxication",
+                "F12.120": "Cannabis abuse with intoxication, uncomplicated",
+                "F12.121": "Cannabis abuse with intoxication delirium",
+                "F12.122": "Cannabis abuse with intoxication with perceptual disturbance",
+                "F12.129": "Cannabis abuse with intoxication, unspecified",
+                "F12.13": "Cannabis abuse with withdrawal",
+                "F12.15": "Cannabis abuse with psychotic disorder",
+                "F12.150": "Cannabis abuse with psychotic disorder with delusions",
+                "F12.151": "Cannabis abuse with psychotic disorder with hallucinations",
+                "F12.159": "Cannabis abuse with psychotic disorder, unspecified",
+                "F12.18": "Cannabis abuse with other cannabis-induced disorder",
+                "F12.180": "Cannabis abuse with cannabis-induced anxiety disorder",
+                "F12.188": "Cannabis abuse with other cannabis-induced disorder",
+                "F12.19": "Cannabis abuse with unspecified cannabis-induced disorder",
+                "F12.2": "Cannabis dependence",
+                "F12.20": "Cannabis dependence, uncomplicated",
+                "F12.21": "Cannabis dependence, in remission",
+                "F12.22": "Cannabis dependence with intoxication",
+                "F12.220": "Cannabis dependence with intoxication, uncomplicated",
+                "F12.221": "Cannabis dependence with intoxication delirium",
+                "F12.222": "Cannabis dependence with intoxication with perceptual disturbance",
+                "F12.229": "Cannabis dependence with intoxication, unspecified",
+                "F12.23": "Cannabis dependence with withdrawal",
+                "F12.25": "Cannabis dependence with psychotic disorder",
+                "F12.250": "Cannabis dependence with psychotic disorder with delusions",
+                "F12.251": "Cannabis dependence with psychotic disorder with hallucinations",
+                "F12.259": "Cannabis dependence with psychotic disorder, unspecified",
+                "F12.28": "Cannabis dependence with other cannabis-induced disorder",
+                "F12.280": "Cannabis dependence with cannabis-induced anxiety disorder",
+                "F12.288": "Cannabis dependence with other cannabis-induced disorder",
+                "F12.29": "Cannabis dependence with unspecified cannabis-induced disorder",
+                "F12.9": "Cannabis use, unspecified",
+                "F12.90": "Cannabis use, unspecified, uncomplicated",
+                "F12.91": "Cannabis use, unspecified, in remission",
+                "F12.92": "Cannabis use, unspecified with intoxication",
+                "F12.920": "Cannabis use, unspecified with intoxication, uncomplicated",
+                "F12.921": "Cannabis use, unspecified with intoxication delirium",
+                "F12.922": "Cannabis use, unspecified with intoxication with perceptual disturbance",
+                "F12.929": "Cannabis use, unspecified with intoxication, unspecified",
+                "F12.93": "Cannabis use, unspecified with withdrawal",
+                "F12.95": "Cannabis use, unspecified with psychotic disorder",
+                "F12.950": "Cannabis use, unspecified with psychotic disorder with delusions",
+                "F12.951": "Cannabis use, unspecified with psychotic disorder with hallucinations",
+                "F12.959": "Cannabis use, unspecified with psychotic disorder, unspecified",
+                "F12.98": "Cannabis use, unspecified with other cannabis-induced disorder",
+                "F12.980": "Cannabis use, unspecified with anxiety disorder",
+                "F12.988": "Cannabis use, unspecified with other cannabis-induced disorder",
+                "F12.99": "Cannabis use, unspecified with unspecified cannabis-induced disorder",
+                "F13": "Sedative, hypnotic, or anxiolytic related disorders",
+                "F13.1": "Sedative, hypnotic or anxiolytic-related abuse",
+                "F13.10": "Sedative, hypnotic or anxiolytic abuse, uncomplicated",
+                "F13.11": "Sedative, hypnotic or anxiolytic abuse, in remission",
+                "F13.12": "Sedative, hypnotic or anxiolytic abuse with intoxication",
+                "F13.120": "Sedative, hypnotic or anxiolytic abuse with intoxication, uncomplicated",
+                "F13.121": "Sedative, hypnotic or anxiolytic abuse with intoxication delirium",
+                "F13.129": "Sedative, hypnotic or anxiolytic abuse with intoxication, unspecified",
+                "F13.13": "Sedative, hypnotic or anxiolytic abuse with withdrawal",
+                "F13.130": "Sedative, hypnotic or anxiolytic abuse with withdrawal, uncomplicated",
+                "F13.131": "Sedative, hypnotic or anxiolytic abuse with withdrawal delirium",
+                "F13.132": "Sedative, hypnotic or anxiolytic abuse with withdrawal with perceptual disturbance",
+                "F13.139": "Sedative, hypnotic or anxiolytic abuse with withdrawal, unspecified",
+                "F13.14": "Sedative, hypnotic or anxiolytic abuse with sedative, hypnotic or anxiolytic-induced mood disorder",
+                "F13.15": "Sedative, hypnotic or anxiolytic abuse with sedative, hypnotic or anxiolytic-induced psychotic disorder",
+                "F13.150": "Sedative, hypnotic or anxiolytic abuse with sedative, hypnotic or anxiolytic-induced psychotic disorder with delusions",
+                "F13.151": "Sedative, hypnotic or anxiolytic abuse with sedative, hypnotic or anxiolytic-induced psychotic disorder with hallucinations",
+                "F13.159": "Sedative, hypnotic or anxiolytic abuse with sedative, hypnotic or anxiolytic-induced psychotic disorder, unspecified",
+                "F13.18": "Sedative, hypnotic or anxiolytic abuse with other sedative, hypnotic or anxiolytic-induced disorders",
+                "F13.180": "Sedative, hypnotic or anxiolytic abuse with sedative, hypnotic or anxiolytic-induced anxiety disorder",
+                "F13.181": "Sedative, hypnotic or anxiolytic abuse with sedative, hypnotic or anxiolytic-induced sexual dysfunction",
+                "F13.182": "Sedative, hypnotic or anxiolytic abuse with sedative, hypnotic or anxiolytic-induced sleep disorder",
+                "F13.188": "Sedative, hypnotic or anxiolytic abuse with other sedative, hypnotic or anxiolytic-induced disorder",
+                "F13.19": "Sedative, hypnotic or anxiolytic abuse with unspecified sedative, hypnotic or anxiolytic-induced disorder",
+                "F13.2": "Sedative, hypnotic or anxiolytic-related dependence",
+                "F13.20": "Sedative, hypnotic or anxiolytic dependence, uncomplicated",
+                "F13.21": "Sedative, hypnotic or anxiolytic dependence, in remission",
+                "F13.22": "Sedative, hypnotic or anxiolytic dependence with intoxication",
+                "F13.220": "Sedative, hypnotic or anxiolytic dependence with intoxication, uncomplicated",
+                "F13.221": "Sedative, hypnotic or anxiolytic dependence with intoxication delirium",
+                "F13.229": "Sedative, hypnotic or anxiolytic dependence with intoxication, unspecified",
+                "F13.23": "Sedative, hypnotic or anxiolytic dependence with withdrawal",
+                "F13.230": "Sedative, hypnotic or anxiolytic dependence with withdrawal, uncomplicated",
+                "F13.231": "Sedative, hypnotic or anxiolytic dependence with withdrawal delirium",
+                "F13.232": "Sedative, hypnotic or anxiolytic dependence with withdrawal with perceptual disturbance",
+                "F13.239": "Sedative, hypnotic or anxiolytic dependence with withdrawal, unspecified",
+                "F13.24": "Sedative, hypnotic or anxiolytic dependence with sedative, hypnotic or anxiolytic-induced mood disorder",
+                "F13.25": "Sedative, hypnotic or anxiolytic dependence with sedative, hypnotic or anxiolytic-induced psychotic disorder",
+                "F13.250": "Sedative, hypnotic or anxiolytic dependence with sedative, hypnotic or anxiolytic-induced psychotic disorder with delusions",
+                "F13.251": "Sedative, hypnotic or anxiolytic dependence with sedative, hypnotic or anxiolytic-induced psychotic disorder with hallucinations",
+                "F13.259": "Sedative, hypnotic or anxiolytic dependence with sedative, hypnotic or anxiolytic-induced psychotic disorder, unspecified",
+                "F13.26": "Sedative, hypnotic or anxiolytic dependence with sedative, hypnotic or anxiolytic-induced persisting amnestic disorder",
+                "F13.27": "Sedative, hypnotic or anxiolytic dependence with sedative, hypnotic or anxiolytic-induced persisting dementia",
+                "F13.28": "Sedative, hypnotic or anxiolytic dependence with other sedative, hypnotic or anxiolytic-induced disorders",
+                "F13.280": "Sedative, hypnotic or anxiolytic dependence with sedative, hypnotic or anxiolytic-induced anxiety disorder",
+                "F13.281": "Sedative, hypnotic or anxiolytic dependence with sedative, hypnotic or anxiolytic-induced sexual dysfunction",
+                "F13.282": "Sedative, hypnotic or anxiolytic dependence with sedative, hypnotic or anxiolytic-induced sleep disorder",
+                "F13.288": "Sedative, hypnotic or anxiolytic dependence with other sedative, hypnotic or anxiolytic-induced disorder",
+                "F13.29": "Sedative, hypnotic or anxiolytic dependence with unspecified sedative, hypnotic or anxiolytic-induced disorder",
+                "F13.9": "Sedative, hypnotic or anxiolytic-related use, unspecified",
+                "F13.90": "Sedative, hypnotic, or anxiolytic use, unspecified, uncomplicated",
+                "F13.91": "Sedative, hypnotic or anxiolytic use, unspecified, in remission",
+                "F13.92": "Sedative, hypnotic or anxiolytic use, unspecified with intoxication",
+                "F13.920": "Sedative, hypnotic or anxiolytic use, unspecified with intoxication, uncomplicated",
+                "F13.921": "Sedative, hypnotic or anxiolytic use, unspecified with intoxication delirium",
+                "F13.929": "Sedative, hypnotic or anxiolytic use, unspecified with intoxication, unspecified",
+                "F13.93": "Sedative, hypnotic or anxiolytic use, unspecified with withdrawal",
+                "F13.930": "Sedative, hypnotic or anxiolytic use, unspecified with withdrawal, uncomplicated",
+                "F13.931": "Sedative, hypnotic or anxiolytic use, unspecified with withdrawal delirium",
+                "F13.932": "Sedative, hypnotic or anxiolytic use, unspecified with withdrawal with perceptual disturbances",
+                "F13.939": "Sedative, hypnotic or anxiolytic use, unspecified with withdrawal, unspecified",
+                "F13.94": "Sedative, hypnotic or anxiolytic use, unspecified with sedative, hypnotic or anxiolytic-induced mood disorder",
+                "F13.95": "Sedative, hypnotic or anxiolytic use, unspecified with sedative, hypnotic or anxiolytic-induced psychotic disorder",
+                "F13.950": "Sedative, hypnotic or anxiolytic use, unspecified with sedative, hypnotic or anxiolytic-induced psychotic disorder with delusions",
+                "F13.951": "Sedative, hypnotic or anxiolytic use, unspecified with sedative, hypnotic or anxiolytic-induced psychotic disorder with hallucinations",
+                "F13.959": "Sedative, hypnotic or anxiolytic use, unspecified with sedative, hypnotic or anxiolytic-induced psychotic disorder, unspecified",
+                "F13.96": "Sedative, hypnotic or anxiolytic use, unspecified with sedative, hypnotic or anxiolytic-induced persisting amnestic disorder",
+                "F13.97": "Sedative, hypnotic or anxiolytic use, unspecified with sedative, hypnotic or anxiolytic-induced persisting dementia",
+                "F13.98": "Sedative, hypnotic or anxiolytic use, unspecified with other sedative, hypnotic or anxiolytic-induced disorders",
+                "F13.980": "Sedative, hypnotic or anxiolytic use, unspecified with sedative, hypnotic or anxiolytic-induced anxiety disorder",
+                "F13.981": "Sedative, hypnotic or anxiolytic use, unspecified with sedative, hypnotic or anxiolytic-induced sexual dysfunction",
+                "F13.982": "Sedative, hypnotic or anxiolytic use, unspecified with sedative, hypnotic or anxiolytic-induced sleep disorder",
+                "F13.988": "Sedative, hypnotic or anxiolytic use, unspecified with other sedative, hypnotic or anxiolytic-induced disorder",
+                "F13.99": "Sedative, hypnotic or anxiolytic use, unspecified with unspecified sedative, hypnotic or anxiolytic-induced disorder",
+                "F14": "Cocaine related disorders",
+                "F14.1": "Cocaine abuse",
+                "F14.10": "Cocaine abuse, uncomplicated",
+                "F14.11": "Cocaine abuse, in remission",
+                "F14.12": "Cocaine abuse with intoxication",
+                "F14.120": "Cocaine abuse with intoxication, uncomplicated",
+                "F14.121": "Cocaine abuse with intoxication with delirium",
+                "F14.122": "Cocaine abuse with intoxication with perceptual disturbance",
+                "F14.129": "Cocaine abuse with intoxication, unspecified",
+                "F14.13": "Cocaine abuse, unspecified with withdrawal",
+                "F14.14": "Cocaine abuse with cocaine-induced mood disorder",
+                "F14.15": "Cocaine abuse with cocaine-induced psychotic disorder",
+                "F14.150": "Cocaine abuse with cocaine-induced psychotic disorder with delusions",
+                "F14.151": "Cocaine abuse with cocaine-induced psychotic disorder with hallucinations",
+                "F14.159": "Cocaine abuse with cocaine-induced psychotic disorder, unspecified",
+                "F14.18": "Cocaine abuse with other cocaine-induced disorder",
+                "F14.180": "Cocaine abuse with cocaine-induced anxiety disorder",
+                "F14.181": "Cocaine abuse with cocaine-induced sexual dysfunction",
+                "F14.182": "Cocaine abuse with cocaine-induced sleep disorder",
+                "F14.188": "Cocaine abuse with other cocaine-induced disorder",
+                "F14.19": "Cocaine abuse with unspecified cocaine-induced disorder",
+                "F14.2": "Cocaine dependence",
+                "F14.20": "Cocaine dependence, uncomplicated",
+                "F14.21": "Cocaine dependence, in remission",
+                "F14.22": "Cocaine dependence with intoxication",
+                "F14.220": "Cocaine dependence with intoxication, uncomplicated",
+                "F14.221": "Cocaine dependence with intoxication delirium",
+                "F14.222": "Cocaine dependence with intoxication with perceptual disturbance",
+                "F14.229": "Cocaine dependence with intoxication, unspecified",
+                "F14.23": "Cocaine dependence with withdrawal",
+                "F14.24": "Cocaine dependence with cocaine-induced mood disorder",
+                "F14.25": "Cocaine dependence with cocaine-induced psychotic disorder",
+                "F14.250": "Cocaine dependence with cocaine-induced psychotic disorder with delusions",
+                "F14.251": "Cocaine dependence with cocaine-induced psychotic disorder with hallucinations",
+                "F14.259": "Cocaine dependence with cocaine-induced psychotic disorder, unspecified",
+                "F14.28": "Cocaine dependence with other cocaine-induced disorder",
+                "F14.280": "Cocaine dependence with cocaine-induced anxiety disorder",
+                "F14.281": "Cocaine dependence with cocaine-induced sexual dysfunction",
+                "F14.282": "Cocaine dependence with cocaine-induced sleep disorder",
+                "F14.288": "Cocaine dependence with other cocaine-induced disorder",
+                "F14.29": "Cocaine dependence with unspecified cocaine-induced disorder",
+                "F14.9": "Cocaine use, unspecified",
+                "F14.90": "Cocaine use, unspecified, uncomplicated",
+                "F14.91": "Cocaine use, unspecified, in remission",
+                "F14.92": "Cocaine use, unspecified with intoxication",
+                "F14.920": "Cocaine use, unspecified with intoxication, uncomplicated",
+                "F14.921": "Cocaine use, unspecified with intoxication delirium",
+                "F14.922": "Cocaine use, unspecified with intoxication with perceptual disturbance",
+                "F14.929": "Cocaine use, unspecified with intoxication, unspecified",
+                "F14.93": "Cocaine use, unspecified with withdrawal",
+                "F14.94": "Cocaine use, unspecified with cocaine-induced mood disorder",
+                "F14.95": "Cocaine use, unspecified with cocaine-induced psychotic disorder",
+                "F14.950": "Cocaine use, unspecified with cocaine-induced psychotic disorder with delusions",
+                "F14.951": "Cocaine use, unspecified with cocaine-induced psychotic disorder with hallucinations",
+                "F14.959": "Cocaine use, unspecified with cocaine-induced psychotic disorder, unspecified",
+                "F14.98": "Cocaine use, unspecified with other specified cocaine-induced disorder",
+                "F14.980": "Cocaine use, unspecified with cocaine-induced anxiety disorder",
+                "F14.981": "Cocaine use, unspecified with cocaine-induced sexual dysfunction",
+                "F14.982": "Cocaine use, unspecified with cocaine-induced sleep disorder",
+                "F14.988": "Cocaine use, unspecified with other cocaine-induced disorder",
+                "F14.99": "Cocaine use, unspecified with unspecified cocaine-induced disorder",
+                "F15": "Other stimulant related disorders",
+                "F15.1": "Other stimulant abuse",
+                "F15.10": "Other stimulant abuse, uncomplicated",
+                "F15.11": "Other stimulant abuse, in remission",
+                "F15.12": "Other stimulant abuse with intoxication",
+                "F15.120": "Other stimulant abuse with intoxication, uncomplicated",
+                "F15.121": "Other stimulant abuse with intoxication delirium",
+                "F15.122": "Other stimulant abuse with intoxication with perceptual disturbance",
+                "F15.129": "Other stimulant abuse with intoxication, unspecified",
+                "F15.13": "Other stimulant abuse with withdrawal",
+                "F15.14": "Other stimulant abuse with stimulant-induced mood disorder",
+                "F15.15": "Other stimulant abuse with stimulant-induced psychotic disorder",
+                "F15.150": "Other stimulant abuse with stimulant-induced psychotic disorder with delusions",
+                "F15.151": "Other stimulant abuse with stimulant-induced psychotic disorder with hallucinations",
+                "F15.159": "Other stimulant abuse with stimulant-induced psychotic disorder, unspecified",
+                "F15.18": "Other stimulant abuse with other stimulant-induced disorder",
+                "F15.180": "Other stimulant abuse with stimulant-induced anxiety disorder",
+                "F15.181": "Other stimulant abuse with stimulant-induced sexual dysfunction",
+                "F15.182": "Other stimulant abuse with stimulant-induced sleep disorder",
+                "F15.188": "Other stimulant abuse with other stimulant-induced disorder",
+                "F15.19": "Other stimulant abuse with unspecified stimulant-induced disorder",
+                "F15.2": "Other stimulant dependence",
+                "F15.20": "Other stimulant dependence, uncomplicated",
+                "F15.21": "Other stimulant dependence, in remission",
+                "F15.22": "Other stimulant dependence with intoxication",
+                "F15.220": "Other stimulant dependence with intoxication, uncomplicated",
+                "F15.221": "Other stimulant dependence with intoxication delirium",
+                "F15.222": "Other stimulant dependence with intoxication with perceptual disturbance",
+                "F15.229": "Other stimulant dependence with intoxication, unspecified",
+                "F15.23": "Other stimulant dependence with withdrawal",
+                "F15.24": "Other stimulant dependence with stimulant-induced mood disorder",
+                "F15.25": "Other stimulant dependence with stimulant-induced psychotic disorder",
+                "F15.250": "Other stimulant dependence with stimulant-induced psychotic disorder with delusions",
+                "F15.251": "Other stimulant dependence with stimulant-induced psychotic disorder with hallucinations",
+                "F15.259": "Other stimulant dependence with stimulant-induced psychotic disorder, unspecified",
+                "F15.28": "Other stimulant dependence with other stimulant-induced disorder",
+                "F15.280": "Other stimulant dependence with stimulant-induced anxiety disorder",
+                "F15.281": "Other stimulant dependence with stimulant-induced sexual dysfunction",
+                "F15.282": "Other stimulant dependence with stimulant-induced sleep disorder",
+                "F15.288": "Other stimulant dependence with other stimulant-induced disorder",
+                "F15.29": "Other stimulant dependence with unspecified stimulant-induced disorder",
+                "F15.9": "Other stimulant use, unspecified",
+                "F15.90": "Other stimulant use, unspecified, uncomplicated",
+                "F15.91": "Other stimulant use, unspecified, in remission",
+                "F15.92": "Other stimulant use, unspecified with intoxication",
+                "F15.920": "Other stimulant use, unspecified with intoxication, uncomplicated",
+                "F15.921": "Other stimulant use, unspecified with intoxication delirium",
+                "F15.922": "Other stimulant use, unspecified with intoxication with perceptual disturbance",
+                "F15.929": "Other stimulant use, unspecified with intoxication, unspecified",
+                "F15.93": "Other stimulant use, unspecified with withdrawal",
+                "F15.94": "Other stimulant use, unspecified with stimulant-induced mood disorder",
+                "F15.95": "Other stimulant use, unspecified with stimulant-induced psychotic disorder",
+                "F15.950": "Other stimulant use, unspecified with stimulant-induced psychotic disorder with delusions",
+                "F15.951": "Other stimulant use, unspecified with stimulant-induced psychotic disorder with hallucinations",
+                "F15.959": "Other stimulant use, unspecified with stimulant-induced psychotic disorder, unspecified",
+                "F15.98": "Other stimulant use, unspecified with other stimulant-induced disorder",
+                "F15.980": "Other stimulant use, unspecified with stimulant-induced anxiety disorder",
+                "F15.981": "Other stimulant use, unspecified with stimulant-induced sexual dysfunction",
+                "F15.982": "Other stimulant use, unspecified with stimulant-induced sleep disorder",
+                "F15.988": "Other stimulant use, unspecified with other stimulant-induced disorder",
+                "F15.99": "Other stimulant use, unspecified with unspecified stimulant-induced disorder",
+                "F16": "Hallucinogen related disorders",
+                "F16.1": "Hallucinogen abuse",
+                "F16.10": "Hallucinogen abuse, uncomplicated",
+                "F16.11": "Hallucinogen abuse, in remission",
+                "F16.12": "Hallucinogen abuse with intoxication",
+                "F16.120": "Hallucinogen abuse with intoxication, uncomplicated",
+                "F16.121": "Hallucinogen abuse with intoxication with delirium",
+                "F16.122": "Hallucinogen abuse with intoxication with perceptual disturbance",
+                "F16.129": "Hallucinogen abuse with intoxication, unspecified",
+                "F16.14": "Hallucinogen abuse with hallucinogen-induced mood disorder",
+                "F16.15": "Hallucinogen abuse with hallucinogen-induced psychotic disorder",
+                "F16.150": "Hallucinogen abuse with hallucinogen-induced psychotic disorder with delusions",
+                "F16.151": "Hallucinogen abuse with hallucinogen-induced psychotic disorder with hallucinations",
+                "F16.159": "Hallucinogen abuse with hallucinogen-induced psychotic disorder, unspecified",
+                "F16.18": "Hallucinogen abuse with other hallucinogen-induced disorder",
+                "F16.180": "Hallucinogen abuse with hallucinogen-induced anxiety disorder",
+                "F16.183": "Hallucinogen abuse with hallucinogen persisting perception disorder (flashbacks)",
+                "F16.188": "Hallucinogen abuse with other hallucinogen-induced disorder",
+                "F16.19": "Hallucinogen abuse with unspecified hallucinogen-induced disorder",
+                "F16.2": "Hallucinogen dependence",
+                "F16.20": "Hallucinogen dependence, uncomplicated",
+                "F16.21": "Hallucinogen dependence, in remission",
+                "F16.22": "Hallucinogen dependence with intoxication",
+                "F16.220": "Hallucinogen dependence with intoxication, uncomplicated",
+                "F16.221": "Hallucinogen dependence with intoxication with delirium",
+                "F16.229": "Hallucinogen dependence with intoxication, unspecified",
+                "F16.24": "Hallucinogen dependence with hallucinogen-induced mood disorder",
+                "F16.25": "Hallucinogen dependence with hallucinogen-induced psychotic disorder",
+                "F16.250": "Hallucinogen dependence with hallucinogen-induced psychotic disorder with delusions",
+                "F16.251": "Hallucinogen dependence with hallucinogen-induced psychotic disorder with hallucinations",
+                "F16.259": "Hallucinogen dependence with hallucinogen-induced psychotic disorder, unspecified",
+                "F16.28": "Hallucinogen dependence with other hallucinogen-induced disorder",
+                "F16.280": "Hallucinogen dependence with hallucinogen-induced anxiety disorder",
+                "F16.283": "Hallucinogen dependence with hallucinogen persisting perception disorder (flashbacks)",
+                "F16.288": "Hallucinogen dependence with other hallucinogen-induced disorder",
+                "F16.29": "Hallucinogen dependence with unspecified hallucinogen-induced disorder",
+                "F16.9": "Hallucinogen use, unspecified",
+                "F16.90": "Hallucinogen use, unspecified, uncomplicated",
+                "F16.91": "Hallucinogen use, unspecified, in remission",
+                "F16.92": "Hallucinogen use, unspecified with intoxication",
+                "F16.920": "Hallucinogen use, unspecified with intoxication, uncomplicated",
+                "F16.921": "Hallucinogen use, unspecified with intoxication with delirium",
+                "F16.929": "Hallucinogen use, unspecified with intoxication, unspecified",
+                "F16.94": "Hallucinogen use, unspecified with hallucinogen-induced mood disorder",
+                "F16.95": "Hallucinogen use, unspecified with hallucinogen-induced psychotic disorder",
+                "F16.950": "Hallucinogen use, unspecified with hallucinogen-induced psychotic disorder with delusions",
+                "F16.951": "Hallucinogen use, unspecified with hallucinogen-induced psychotic disorder with hallucinations",
+                "F16.959": "Hallucinogen use, unspecified with hallucinogen-induced psychotic disorder, unspecified",
+                "F16.98": "Hallucinogen use, unspecified with other specified hallucinogen-induced disorder",
+                "F16.980": "Hallucinogen use, unspecified with hallucinogen-induced anxiety disorder",
+                "F16.983": "Hallucinogen use, unspecified with hallucinogen persisting perception disorder (flashbacks)",
+                "F16.988": "Hallucinogen use, unspecified with other hallucinogen-induced disorder",
+                "F16.99": "Hallucinogen use, unspecified with unspecified hallucinogen-induced disorder",
+                "F17": "Nicotine dependence",
+                "F17.2": "Nicotine dependence",
+                "F17.20": "Nicotine dependence, unspecified",
+                "F17.200": "Nicotine dependence, unspecified, uncomplicated",
+                "F17.201": "Nicotine dependence, unspecified, in remission",
+                "F17.203": "Nicotine dependence unspecified, with withdrawal",
+                "F17.208": "Nicotine dependence, unspecified, with other nicotine-induced disorders",
+                "F17.209": "Nicotine dependence, unspecified, with unspecified nicotine-induced disorders",
+                "F17.21": "Nicotine dependence, cigarettes",
+                "F17.210": "Nicotine dependence, cigarettes, uncomplicated",
+                "F17.211": "Nicotine dependence, cigarettes, in remission",
+                "F17.213": "Nicotine dependence, cigarettes, with withdrawal",
+                "F17.218": "Nicotine dependence, cigarettes, with other nicotine-induced disorders",
+                "F17.219": "Nicotine dependence, cigarettes, with unspecified nicotine-induced disorders",
+                "F17.22": "Nicotine dependence, chewing tobacco",
+                "F17.220": "Nicotine dependence, chewing tobacco, uncomplicated",
+                "F17.221": "Nicotine dependence, chewing tobacco, in remission",
+                "F17.223": "Nicotine dependence, chewing tobacco, with withdrawal",
+                "F17.228": "Nicotine dependence, chewing tobacco, with other nicotine-induced disorders",
+                "F17.229": "Nicotine dependence, chewing tobacco, with unspecified nicotine-induced disorders",
+                "F17.29": "Nicotine dependence, other tobacco product",
+                "F17.290": "Nicotine dependence, other tobacco product, uncomplicated",
+                "F17.291": "Nicotine dependence, other tobacco product, in remission",
+                "F17.293": "Nicotine dependence, other tobacco product, with withdrawal",
+                "F17.298": "Nicotine dependence, other tobacco product, with other nicotine-induced disorders",
+                "F17.299": "Nicotine dependence, other tobacco product, with unspecified nicotine-induced disorders",
+                "F18": "Inhalant related disorders",
+                "F18.1": "Inhalant abuse",
+                "F18.10": "Inhalant abuse, uncomplicated",
+                "F18.11": "Inhalant abuse, in remission",
+                "F18.12": "Inhalant abuse with intoxication",
+                "F18.120": "Inhalant abuse with intoxication, uncomplicated",
+                "F18.121": "Inhalant abuse with intoxication delirium",
+                "F18.129": "Inhalant abuse with intoxication, unspecified",
+                "F18.14": "Inhalant abuse with inhalant-induced mood disorder",
+                "F18.15": "Inhalant abuse with inhalant-induced psychotic disorder",
+                "F18.150": "Inhalant abuse with inhalant-induced psychotic disorder with delusions",
+                "F18.151": "Inhalant abuse with inhalant-induced psychotic disorder with hallucinations",
+                "F18.159": "Inhalant abuse with inhalant-induced psychotic disorder, unspecified",
+                "F18.17": "Inhalant abuse with inhalant-induced dementia",
+                "F18.18": "Inhalant abuse with other inhalant-induced disorders",
+                "F18.180": "Inhalant abuse with inhalant-induced anxiety disorder",
+                "F18.188": "Inhalant abuse with other inhalant-induced disorder",
+                "F18.19": "Inhalant abuse with unspecified inhalant-induced disorder",
+                "F18.2": "Inhalant dependence",
+                "F18.20": "Inhalant dependence, uncomplicated",
+                "F18.21": "Inhalant dependence, in remission",
+                "F18.22": "Inhalant dependence with intoxication",
+                "F18.220": "Inhalant dependence with intoxication, uncomplicated",
+                "F18.221": "Inhalant dependence with intoxication delirium",
+                "F18.229": "Inhalant dependence with intoxication, unspecified",
+                "F18.24": "Inhalant dependence with inhalant-induced mood disorder",
+                "F18.25": "Inhalant dependence with inhalant-induced psychotic disorder",
+                "F18.250": "Inhalant dependence with inhalant-induced psychotic disorder with delusions",
+                "F18.251": "Inhalant dependence with inhalant-induced psychotic disorder with hallucinations",
+                "F18.259": "Inhalant dependence with inhalant-induced psychotic disorder, unspecified",
+                "F18.27": "Inhalant dependence with inhalant-induced dementia",
+                "F18.28": "Inhalant dependence with other inhalant-induced disorders",
+                "F18.280": "Inhalant dependence with inhalant-induced anxiety disorder",
+                "F18.288": "Inhalant dependence with other inhalant-induced disorder",
+                "F18.29": "Inhalant dependence with unspecified inhalant-induced disorder",
+                "F18.9": "Inhalant use, unspecified",
+                "F18.90": "Inhalant use, unspecified, uncomplicated",
+                "F18.91": "Inhalant use, unspecified, in remission",
+                "F18.92": "Inhalant use, unspecified with intoxication",
+                "F18.920": "Inhalant use, unspecified with intoxication, uncomplicated",
+                "F18.921": "Inhalant use, unspecified with intoxication with delirium",
+                "F18.929": "Inhalant use, unspecified with intoxication, unspecified",
+                "F18.94": "Inhalant use, unspecified with inhalant-induced mood disorder",
+                "F18.95": "Inhalant use, unspecified with inhalant-induced psychotic disorder",
+                "F18.950": "Inhalant use, unspecified with inhalant-induced psychotic disorder with delusions",
+                "F18.951": "Inhalant use, unspecified with inhalant-induced psychotic disorder with hallucinations",
+                "F18.959": "Inhalant use, unspecified with inhalant-induced psychotic disorder, unspecified",
+                "F18.97": "Inhalant use, unspecified with inhalant-induced persisting dementia",
+                "F18.98": "Inhalant use, unspecified with other inhalant-induced disorders",
+                "F18.980": "Inhalant use, unspecified with inhalant-induced anxiety disorder",
+                "F18.988": "Inhalant use, unspecified with other inhalant-induced disorder",
+                "F18.99": "Inhalant use, unspecified with unspecified inhalant-induced disorder",
+                "F19": "Other psychoactive substance related disorders",
+                "F19.1": "Other psychoactive substance abuse",
+                "F19.10": "Other psychoactive substance abuse, uncomplicated",
+                "F19.11": "Other psychoactive substance abuse, in remission",
+                "F19.12": "Other psychoactive substance abuse with intoxication",
+                "F19.120": "Other psychoactive substance abuse with intoxication, uncomplicated",
+                "F19.121": "Other psychoactive substance abuse with intoxication delirium",
+                "F19.122": "Other psychoactive substance abuse with intoxication with perceptual disturbances",
+                "F19.129": "Other psychoactive substance abuse with intoxication, unspecified",
+                "F19.13": "Other psychoactive substance abuse with withdrawal",
+                "F19.130": "Other psychoactive substance abuse with withdrawal, uncomplicated",
+                "F19.131": "Other psychoactive substance abuse with withdrawal delirium",
+                "F19.132": "Other psychoactive substance abuse with withdrawal with perceptual disturbance",
+                "F19.139": "Other psychoactive substance abuse with withdrawal, unspecified",
+                "F19.14": "Other psychoactive substance abuse with psychoactive substance-induced mood disorder",
+                "F19.15": "Other psychoactive substance abuse with psychoactive substance-induced psychotic disorder",
+                "F19.150": "Other psychoactive substance abuse with psychoactive substance-induced psychotic disorder with delusions",
+                "F19.151": "Other psychoactive substance abuse with psychoactive substance-induced psychotic disorder with hallucinations",
+                "F19.159": "Other psychoactive substance abuse with psychoactive substance-induced psychotic disorder, unspecified",
+                "F19.16": "Other psychoactive substance abuse with psychoactive substance-induced persisting amnestic disorder",
+                "F19.17": "Other psychoactive substance abuse with psychoactive substance-induced persisting dementia",
+                "F19.18": "Other psychoactive substance abuse with other psychoactive substance-induced disorders",
+                "F19.180": "Other psychoactive substance abuse with psychoactive substance-induced anxiety disorder",
+                "F19.181": "Other psychoactive substance abuse with psychoactive substance-induced sexual dysfunction",
+                "F19.182": "Other psychoactive substance abuse with psychoactive substance-induced sleep disorder",
+                "F19.188": "Other psychoactive substance abuse with other psychoactive substance-induced disorder",
+                "F19.19": "Other psychoactive substance abuse with unspecified psychoactive substance-induced disorder",
+                "F19.2": "Other psychoactive substance dependence",
+                "F19.20": "Other psychoactive substance dependence, uncomplicated",
+                "F19.21": "Other psychoactive substance dependence, in remission",
+                "F19.22": "Other psychoactive substance dependence with intoxication",
+                "F19.220": "Other psychoactive substance dependence with intoxication, uncomplicated",
+                "F19.221": "Other psychoactive substance dependence with intoxication delirium",
+                "F19.222": "Other psychoactive substance dependence with intoxication with perceptual disturbance",
+                "F19.229": "Other psychoactive substance dependence with intoxication, unspecified",
+                "F19.23": "Other psychoactive substance dependence with withdrawal",
+                "F19.230": "Other psychoactive substance dependence with withdrawal, uncomplicated",
+                "F19.231": "Other psychoactive substance dependence with withdrawal delirium",
+                "F19.232": "Other psychoactive substance dependence with withdrawal with perceptual disturbance",
+                "F19.239": "Other psychoactive substance dependence with withdrawal, unspecified",
+                "F19.24": "Other psychoactive substance dependence with psychoactive substance-induced mood disorder",
+                "F19.25": "Other psychoactive substance dependence with psychoactive substance-induced psychotic disorder",
+                "F19.250": "Other psychoactive substance dependence with psychoactive substance-induced psychotic disorder with delusions",
+                "F19.251": "Other psychoactive substance dependence with psychoactive substance-induced psychotic disorder with hallucinations",
+                "F19.259": "Other psychoactive substance dependence with psychoactive substance-induced psychotic disorder, unspecified",
+                "F19.26": "Other psychoactive substance dependence with psychoactive substance-induced persisting amnestic disorder",
+                "F19.27": "Other psychoactive substance dependence with psychoactive substance-induced persisting dementia",
+                "F19.28": "Other psychoactive substance dependence with other psychoactive substance-induced disorders",
+                "F19.280": "Other psychoactive substance dependence with psychoactive substance-induced anxiety disorder",
+                "F19.281": "Other psychoactive substance dependence with psychoactive substance-induced sexual dysfunction",
+                "F19.282": "Other psychoactive substance dependence with psychoactive substance-induced sleep disorder",
+                "F19.288": "Other psychoactive substance dependence with other psychoactive substance-induced disorder",
+                "F19.29": "Other psychoactive substance dependence with unspecified psychoactive substance-induced disorder",
+                "F19.9": "Other psychoactive substance use, unspecified",
+                "F19.90": "Other psychoactive substance use, unspecified, uncomplicated",
+                "F19.91": "Other psychoactive substance use, unspecified, in remission",
+                "F19.92": "Other psychoactive substance use, unspecified with intoxication",
+                "F19.920": "Other psychoactive substance use, unspecified with intoxication, uncomplicated",
+                "F19.921": "Other psychoactive substance use, unspecified with intoxication with delirium",
+                "F19.922": "Other psychoactive substance use, unspecified with intoxication with perceptual disturbance",
+                "F19.929": "Other psychoactive substance use, unspecified with intoxication, unspecified",
+                "F19.93": "Other psychoactive substance use, unspecified with withdrawal",
+                "F19.930": "Other psychoactive substance use, unspecified with withdrawal, uncomplicated",
+                "F19.931": "Other psychoactive substance use, unspecified with withdrawal delirium",
+                "F19.932": "Other psychoactive substance use, unspecified with withdrawal with perceptual disturbance",
+                "F19.939": "Other psychoactive substance use, unspecified with withdrawal, unspecified",
+                "F19.94": "Other psychoactive substance use, unspecified with psychoactive substance-induced mood disorder",
+                "F19.95": "Other psychoactive substance use, unspecified with psychoactive substance-induced psychotic disorder",
+                "F19.950": "Other psychoactive substance use, unspecified with psychoactive substance-induced psychotic disorder with delusions",
+                "F19.951": "Other psychoactive substance use, unspecified with psychoactive substance-induced psychotic disorder with hallucinations",
+                "F19.959": "Other psychoactive substance use, unspecified with psychoactive substance-induced psychotic disorder, unspecified",
+                "F19.96": "Other psychoactive substance use, unspecified with psychoactive substance-induced persisting amnestic disorder",
+                "F19.97": "Other psychoactive substance use, unspecified with psychoactive substance-induced persisting dementia",
+                "F19.98": "Other psychoactive substance use, unspecified with other psychoactive substance-induced disorders",
+                "F19.980": "Other psychoactive substance use, unspecified with psychoactive substance-induced anxiety disorder",
+                "F19.981": "Other psychoactive substance use, unspecified with psychoactive substance-induced sexual dysfunction",
+                "F19.982": "Other psychoactive substance use, unspecified with psychoactive substance-induced sleep disorder",
+                "F19.988": "Other psychoactive substance use, unspecified with other psychoactive substance-induced disorder",
+                "F19.99": "Other psychoactive substance use, unspecified with unspecified psychoactive substance-induced disorder",
+                "F20": "Schizophrenia",
+                "F20.0": "Paranoid schizophrenia",
+                "F20.1": "Disorganized schizophrenia",
+                "F20.2": "Catatonic schizophrenia",
+                "F20.3": "Undifferentiated schizophrenia",
+                "F20.5": "Residual schizophrenia",
+                "F20.8": "Other schizophrenia",
+                "F20.81": "Schizophreniform disorder",
+                "F20.89": "Other schizophrenia",
+                "F20.9": "Schizophrenia, unspecified",
+                "F21": "Schizotypal disorder",
+                "F22": "Delusional disorders",
+                "F23": "Brief psychotic disorder",
+                "F24": "Shared psychotic disorder",
+                "F25": "Schizoaffective disorders",
+                "F25.0": "Schizoaffective disorder, bipolar type",
+                "F25.1": "Schizoaffective disorder, depressive type",
+                "F25.8": "Other schizoaffective disorders",
+                "F25.9": "Schizoaffective disorder, unspecified",
+                "F28": "Other psychotic disorder not due to a substance or known physiological condition",
+                "F29": "Unspecified psychosis not due to a substance or known physiological condition",
+                "F30": "Manic episode",
+                "F30.1": "Manic episode without psychotic symptoms",
+                "F30.10": "Manic episode without psychotic symptoms, unspecified",
+                "F30.11": "Manic episode without psychotic symptoms, mild",
+                "F30.12": "Manic episode without psychotic symptoms, moderate",
+                "F30.13": "Manic episode, severe, without psychotic symptoms",
+                "F30.2": "Manic episode, severe with psychotic symptoms",
+                "F30.3": "Manic episode in partial remission",
+                "F30.4": "Manic episode in full remission",
+                "F30.8": "Other manic episodes",
+                "F30.9": "Manic episode, unspecified",
+                "F31": "Bipolar disorder",
+                "F31.0": "Bipolar disorder, current episode hypomanic",
+                "F31.1": "Bipolar disorder, current episode manic without psychotic features",
+                "F31.10": "Bipolar disorder, current episode manic without psychotic features, unspecified",
+                "F31.11": "Bipolar disorder, current episode manic without psychotic features, mild",
+                "F31.12": "Bipolar disorder, current episode manic without psychotic features, moderate",
+                "F31.13": "Bipolar disorder, current episode manic without psychotic features, severe",
+                "F31.2": "Bipolar disorder, current episode manic severe with psychotic features",
+                "F31.3": "Bipolar disorder, current episode depressed, mild or moderate severity",
+                "F31.30": "Bipolar disorder, current episode depressed, mild or moderate severity, unspecified",
+                "F31.31": "Bipolar disorder, current episode depressed, mild",
+                "F31.32": "Bipolar disorder, current episode depressed, moderate",
+                "F31.4": "Bipolar disorder, current episode depressed, severe, without psychotic features",
+                "F31.5": "Bipolar disorder, current episode depressed, severe, with psychotic features",
+                "F31.6": "Bipolar disorder, current episode mixed",
+                "F31.60": "Bipolar disorder, current episode mixed, unspecified",
+                "F31.61": "Bipolar disorder, current episode mixed, mild",
+                "F31.62": "Bipolar disorder, current episode mixed, moderate",
+                "F31.63": "Bipolar disorder, current episode mixed, severe, without psychotic features",
+                "F31.64": "Bipolar disorder, current episode mixed, severe, with psychotic features",
+                "F31.7": "Bipolar disorder, currently in remission",
+                "F31.70": "Bipolar disorder, currently in remission, most recent episode unspecified",
+                "F31.71": "Bipolar disorder, in partial remission, most recent episode hypomanic",
+                "F31.72": "Bipolar disorder, in full remission, most recent episode hypomanic",
+                "F31.73": "Bipolar disorder, in partial remission, most recent episode manic",
+                "F31.74": "Bipolar disorder, in full remission, most recent episode manic",
+                "F31.75": "Bipolar disorder, in partial remission, most recent episode depressed",
+                "F31.76": "Bipolar disorder, in full remission, most recent episode depressed",
+                "F31.77": "Bipolar disorder, in partial remission, most recent episode mixed",
+                "F31.78": "Bipolar disorder, in full remission, most recent episode mixed",
+                "F31.8": "Other bipolar disorders",
+                "F31.81": "Bipolar II disorder",
+                "F31.89": "Other bipolar disorder",
+                "F31.9": "Bipolar disorder, unspecified",
+                "F32": "Depressive episode",
+                "F32.0": "Major depressive disorder, single episode, mild",
+                "F32.1": "Major depressive disorder, single episode, moderate",
+                "F32.2": "Major depressive disorder, single episode, severe without psychotic features",
+                "F32.3": "Major depressive disorder, single episode, severe with psychotic features",
+                "F32.4": "Major depressive disorder, single episode, in partial remission",
+                "F32.5": "Major depressive disorder, single episode, in full remission",
+                "F32.8": "Other depressive episodes",
+                "F32.81": "Premenstrual dysphoric disorder",
+                "F32.89": "Other specified depressive episodes",
+                "F32.9": "Major depressive disorder, single episode, unspecified",
+                "F32.A": "Depression, unspecified",
+                "F33": "Major depressive disorder, recurrent",
+                "F33.0": "Major depressive disorder, recurrent, mild",
+                "F33.1": "Major depressive disorder, recurrent, moderate",
+                "F33.2": "Major depressive disorder, recurrent severe without psychotic features",
+                "F33.3": "Major depressive disorder, recurrent, severe with psychotic symptoms",
+                "F33.4": "Major depressive disorder, recurrent, in remission",
+                "F33.40": "Major depressive disorder, recurrent, in remission, unspecified",
+                "F33.41": "Major depressive disorder, recurrent, in partial remission",
+                "F33.42": "Major depressive disorder, recurrent, in full remission",
+                "F33.8": "Other recurrent depressive disorders",
+                "F33.9": "Major depressive disorder, recurrent, unspecified",
+                "F34": "Persistent mood [affective] disorders",
+                "F34.0": "Cyclothymic disorder",
+                "F34.1": "Dysthymic disorder",
+                "F34.8": "Other persistent mood [affective] disorders",
+                "F34.81": "Disruptive mood dysregulation disorder",
+                "F34.89": "Other specified persistent mood disorders",
+                "F34.9": "Persistent mood [affective] disorder, unspecified",
+                "F39": "Unspecified mood [affective] disorder",
+                "F40": "Phobic anxiety disorders",
+                "F40.0": "Agoraphobia",
+                "F40.00": "Agoraphobia, unspecified",
+                "F40.01": "Agoraphobia with panic disorder",
+                "F40.02": "Agoraphobia without panic disorder",
+                "F40.1": "Social phobias",
+                "F40.10": "Social phobia, unspecified",
+                "F40.11": "Social phobia, generalized",
+                "F40.2": "Specific (isolated) phobias",
+                "F40.21": "Animal type phobia",
+                "F40.210": "Arachnophobia",
+                "F40.218": "Other animal type phobia",
+                "F40.22": "Natural environment type phobia",
+                "F40.220": "Fear of thunderstorms",
+                "F40.228": "Other natural environment type phobia",
+                "F40.23": "Blood, injection, injury type phobia",
+                "F40.230": "Fear of blood",
+                "F40.231": "Fear of injections and transfusions",
+                "F40.232": "Fear of other medical care",
+                "F40.233": "Fear of injury",
+                "F40.24": "Situational type phobia",
+                "F40.240": "Claustrophobia",
+                "F40.241": "Acrophobia",
+                "F40.242": "Fear of bridges",
+                "F40.243": "Fear of flying",
+                "F40.248": "Other situational type phobia",
+                "F40.29": "Other specified phobia",
+                "F40.290": "Androphobia",
+                "F40.291": "Gynephobia",
+                "F40.298": "Other specified phobia",
+                "F40.8": "Other phobic anxiety disorders",
+                "F40.9": "Phobic anxiety disorder, unspecified",
+                "F41": "Other anxiety disorders",
+                "F41.0": "Panic disorder [episodic paroxysmal anxiety]",
+                "F41.1": "Generalized anxiety disorder",
+                "F41.3": "Other mixed anxiety disorders",
+                "F41.8": "Other specified anxiety disorders",
+                "F41.9": "Anxiety disorder, unspecified",
+                "F42": "Obsessive-compulsive disorder",
+                "F42.2": "Mixed obsessional thoughts and acts",
+                "F42.3": "Hoarding disorder",
+                "F42.4": "Excoriation (skin-picking) disorder",
+                "F42.8": "Other obsessive-compulsive disorder",
+                "F42.9": "Obsessive-compulsive disorder, unspecified",
+                "F43": "Reaction to severe stress, and adjustment disorders",
+                "F43.0": "Acute stress reaction",
+                "F43.1": "Post-traumatic stress disorder (PTSD)",
+                "F43.10": "Post-traumatic stress disorder, unspecified",
+                "F43.11": "Post-traumatic stress disorder, acute",
+                "F43.12": "Post-traumatic stress disorder, chronic",
+                "F43.2": "Adjustment disorders",
+                "F43.20": "Adjustment disorder, unspecified",
+                "F43.21": "Adjustment disorder with depressed mood",
+                "F43.22": "Adjustment disorder with anxiety",
+                "F43.23": "Adjustment disorder with mixed anxiety and depressed mood",
+                "F43.24": "Adjustment disorder with disturbance of conduct",
+                "F43.25": "Adjustment disorder with mixed disturbance of emotions and conduct",
+                "F43.29": "Adjustment disorder with other symptoms",
+                "F43.8": "Other reactions to severe stress",
+                "F43.81": "Prolonged grief disorder",
+                "F43.89": "Other reactions to severe stress",
+                "F43.9": "Reaction to severe stress, unspecified",
+                "F44": "Dissociative and conversion disorders",
+                "F44.0": "Dissociative amnesia",
+                "F44.1": "Dissociative fugue",
+                "F44.2": "Dissociative stupor",
+                "F44.4": "Conversion disorder with motor symptom or deficit",
+                "F44.5": "Conversion disorder with seizures or convulsions",
+                "F44.6": "Conversion disorder with sensory symptom or deficit",
+                "F44.7": "Conversion disorder with mixed symptom presentation",
+                "F44.8": "Other dissociative and conversion disorders",
+                "F44.81": "Dissociative identity disorder",
+                "F44.89": "Other dissociative and conversion disorders",
+                "F44.9": "Dissociative and conversion disorder, unspecified",
+                "F45": "Somatoform disorders",
+                "F45.0": "Somatization disorder",
+                "F45.1": "Undifferentiated somatoform disorder",
+                "F45.2": "Hypochondriacal disorders",
+                "F45.20": "Hypochondriacal disorder, unspecified",
+                "F45.21": "Hypochondriasis",
+                "F45.22": "Body dysmorphic disorder",
+                "F45.29": "Other hypochondriacal disorders",
+                "F45.4": "Pain disorders related to psychological factors",
+                "F45.41": "Pain disorder exclusively related to psychological factors",
+                "F45.42": "Pain disorder with related psychological factors",
+                "F45.8": "Other somatoform disorders",
+                "F45.9": "Somatoform disorder, unspecified",
+                "F48": "Other nonpsychotic mental disorders",
+                "F48.1": "Depersonalization-derealization syndrome",
+                "F48.2": "Pseudobulbar affect",
+                "F48.8": "Other specified nonpsychotic mental disorders",
+                "F48.9": "Nonpsychotic mental disorder, unspecified",
+                "F50": "Eating disorders",
+                "F50.0": "Anorexia nervosa",
+                "F50.00": "Anorexia nervosa, unspecified",
+                "F50.01": "Anorexia nervosa, restricting type",
+                "F50.010": "Anorexia nervosa, restricting type, mild",
+                "F50.011": "Anorexia nervosa, restricting type, moderate",
+                "F50.012": "Anorexia nervosa, restricting type, severe",
+                "F50.013": "Anorexia nervosa, restricting type, extreme",
+                "F50.014": "Anorexia nervosa, restricting type, in remission",
+                "F50.019": "Anorexia nervosa, restricting type, unspecified",
+                "F50.02": "Anorexia nervosa, binge eating/purging type",
+                "F50.020": "Anorexia nervosa, binge eating/purging type, mild",
+                "F50.021": "Anorexia nervosa, binge eating/purging type, moderate",
+                "F50.022": "Anorexia nervosa, binge eating/purging type, severe",
+                "F50.023": "Anorexia nervosa, binge eating/purging type, extreme",
+                "F50.024": "Anorexia nervosa, binge eating/purging type, in remission",
+                "F50.029": "Anorexia nervosa, binge eating/purging type, unspecified",
+                "F50.2": "Bulimia nervosa",
+                "F50.20": "Bulimia nervosa, unspecified",
+                "F50.21": "Bulimia nervosa, mild",
+                "F50.22": "Bulimia nervosa, moderate",
+                "F50.23": "Bulimia nervosa, severe",
+                "F50.24": "Bulimia nervosa, extreme",
+                "F50.25": "Bulimia nervosa, in remission",
+                "F50.8": "Other eating disorders",
+                "F50.81": "Binge eating disorder",
+                "F50.810": "Binge eating disorder, mild",
+                "F50.811": "Binge eating disorder, moderate",
+                "F50.812": "Binge eating disorder, severe",
+                "F50.813": "Binge eating disorder, extreme",
+                "F50.814": "Binge eating disorder, in remission",
+                "F50.819": "Binge eating disorder, unspecified",
+                "F50.82": "Avoidant/restrictive food intake disorder",
+                "F50.83": "Pica in adults",
+                "F50.84": "Rumination disorder in adults",
+                "F50.89": "Other specified eating disorder",
+                "F50.9": "Eating disorder, unspecified",
+                "F51": "Sleep disorders not due to a substance or known physiological condition",
+                "F51.0": "Insomnia not due to a substance or known physiological condition",
+                "F51.01": "Primary insomnia",
+                "F51.02": "Adjustment insomnia",
+                "F51.03": "Paradoxical insomnia",
+                "F51.04": "Psychophysiologic insomnia",
+                "F51.05": "Insomnia due to other mental disorder",
+                "F51.09": "Other insomnia not due to a substance or known physiological condition",
+                "F51.1": "Hypersomnia not due to a substance or known physiological condition",
+                "F51.11": "Primary hypersomnia",
+                "F51.12": "Insufficient sleep syndrome",
+                "F51.13": "Hypersomnia due to other mental disorder",
+                "F51.19": "Other hypersomnia not due to a substance or known physiological condition",
+                "F51.3": "Sleepwalking [somnambulism]",
+                "F51.4": "Sleep terrors [night terrors]",
+                "F51.5": "Nightmare disorder",
+                "F51.8": "Other sleep disorders not due to a substance or known physiological condition",
+                "F51.9": "Sleep disorder not due to a substance or known physiological condition, unspecified",
+                "F52": "Sexual dysfunction not due to a substance or known physiological condition",
+                "F52.0": "Hypoactive sexual desire disorder",
+                "F52.1": "Sexual aversion disorder",
+                "F52.2": "Sexual arousal disorders",
+                "F52.21": "Male erectile disorder",
+                "F52.22": "Female sexual arousal disorder",
+                "F52.3": "Orgasmic disorder",
+                "F52.31": "Female orgasmic disorder",
+                "F52.32": "Male orgasmic disorder",
+                "F52.4": "Premature ejaculation",
+                "F52.5": "Vaginismus not due to a substance or known physiological condition",
+                "F52.6": "Dyspareunia not due to a substance or known physiological condition",
+                "F52.8": "Other sexual dysfunction not due to a substance or known physiological condition",
+                "F52.9": "Unspecified sexual dysfunction not due to a substance or known physiological condition",
+                "F53": "Mental and behavioral disorders associated with the puerperium, not elsewhere classified",
+                "F53.0": "Postpartum depression",
+                "F53.1": "Puerperal psychosis",
+                "F54": "Psychological and behavioral factors associated with disorders or diseases classified elsewhere",
+                "F55": "Abuse of non-psychoactive substances",
+                "F55.0": "Abuse of antacids",
+                "F55.1": "Abuse of herbal or folk remedies",
+                "F55.2": "Abuse of laxatives",
+                "F55.3": "Abuse of steroids or hormones",
+                "F55.4": "Abuse of vitamins",
+                "F55.8": "Abuse of other non-psychoactive substances",
+                "F59": "Unspecified behavioral syndromes associated with physiological disturbances and physical factors",
+                "F60": "Specific personality disorders",
+                "F60.0": "Paranoid personality disorder",
+                "F60.1": "Schizoid personality disorder",
+                "F60.2": "Antisocial personality disorder",
+                "F60.3": "Borderline personality disorder",
+                "F60.4": "Histrionic personality disorder",
+                "F60.5": "Obsessive-compulsive personality disorder",
+                "F60.6": "Avoidant personality disorder",
+                "F60.7": "Dependent personality disorder",
+                "F60.8": "Other specific personality disorders",
+                "F60.81": "Narcissistic personality disorder",
+                "F60.89": "Other specific personality disorders",
+                "F60.9": "Personality disorder, unspecified",
+                "F63": "Impulse disorders",
+                "F63.0": "Pathological gambling",
+                "F63.1": "Pyromania",
+                "F63.2": "Kleptomania",
+                "F63.3": "Trichotillomania",
+                "F63.8": "Other impulse disorders",
+                "F63.81": "Intermittent explosive disorder",
+                "F63.89": "Other impulse disorders",
+                "F63.9": "Impulse disorder, unspecified",
+                "F64": "Gender identity disorders",
+                "F64.0": "Transsexualism",
+                "F64.1": "Dual role transvestism",
+                "F64.2": "Gender identity disorder of childhood",
+                "F64.8": "Other gender identity disorders",
+                "F64.9": "Gender identity disorder, unspecified",
+                "F65": "Paraphilias",
+                "F65.0": "Fetishism",
+                "F65.1": "Transvestic fetishism",
+                "F65.2": "Exhibitionism",
+                "F65.3": "Voyeurism",
+                "F65.4": "Pedophilia",
+                "F65.5": "Sadomasochism",
+                "F65.50": "Sadomasochism, unspecified",
+                "F65.51": "Sexual masochism",
+                "F65.52": "Sexual sadism",
+                "F65.8": "Other paraphilias",
+                "F65.81": "Frotteurism",
+                "F65.89": "Other paraphilias",
+                "F65.9": "Paraphilia, unspecified",
+                "F66": "Other sexual disorders",
+                "F68": "Other disorders of adult personality and behavior",
+                "F68.1": "Factitious disorder imposed on self",
+                "F68.10": "Factitious disorder imposed on self, unspecified",
+                "F68.11": "Factitious disorder imposed on self, with predominantly psychological signs and symptoms",
+                "F68.12": "Factitious disorder imposed on self, with predominantly physical signs and symptoms",
+                "F68.13": "Factitious disorder imposed on self, with combined psychological and physical signs and symptoms",
+                "F68.8": "Other specified disorders of adult personality and behavior",
+                "F68.A": "Factitious disorder imposed on another",
+                "F69": "Unspecified disorder of adult personality and behavior",
+                "F70": "Mild intellectual disabilities",
+                "F71": "Moderate intellectual disabilities",
+                "F72": "Severe intellectual disabilities",
+                "F73": "Profound intellectual disabilities",
+                "F78": "Other intellectual disabilities",
+                "F78.A": "Other genetic related intellectual disabilities",
+                "F78.A1": "SYNGAP1-related intellectual disability",
+                "F78.A9": "Other genetic related intellectual disability",
+                "F79": "Unspecified intellectual disabilities",
+                "F80": "Specific developmental disorders of speech and language",
+                "F80.0": "Phonological disorder",
+                "F80.1": "Expressive language disorder",
+                "F80.2": "Mixed receptive-expressive language disorder",
+                "F80.4": "Speech and language development delay due to hearing loss",
+                "F80.8": "Other developmental disorders of speech and language",
+                "F80.81": "Childhood onset fluency disorder",
+                "F80.82": "Social pragmatic communication disorder",
+                "F80.89": "Other developmental disorders of speech and language",
+                "F80.9": "Developmental disorder of speech and language, unspecified",
+                "F81": "Specific developmental disorders of scholastic skills",
+                "F81.0": "Specific reading disorder",
+                "F81.2": "Mathematics disorder",
+                "F81.8": "Other developmental disorders of scholastic skills",
+                "F81.81": "Disorder of written expression",
+                "F81.89": "Other developmental disorders of scholastic skills",
+                "F81.9": "Developmental disorder of scholastic skills, unspecified",
+                "F82": "Specific developmental disorder of motor function",
+                "F84": "Pervasive developmental disorders",
+                "F84.0": "Autistic disorder",
+                "F84.2": "Rett's syndrome",
+                "F84.3": "Other childhood disintegrative disorder",
+                "F84.5": "Asperger's syndrome",
+                "F84.8": "Other pervasive developmental disorders",
+                "F84.9": "Pervasive developmental disorder, unspecified",
+                "F88": "Other disorders of psychological development",
+                "F89": "Unspecified disorder of psychological development",
+                "F90": "Attention-deficit hyperactivity disorders",
+                "F90.0": "Attention-deficit hyperactivity disorder, predominantly inattentive type",
+                "F90.1": "Attention-deficit hyperactivity disorder, predominantly hyperactive type",
+                "F90.2": "Attention-deficit hyperactivity disorder, combined type",
+                "F90.8": "Attention-deficit hyperactivity disorder, other type",
+                "F90.9": "Attention-deficit hyperactivity disorder, unspecified type",
+                "F91": "Conduct disorders",
+                "F91.0": "Conduct disorder confined to family context",
+                "F91.1": "Conduct disorder, childhood-onset type",
+                "F91.2": "Conduct disorder, adolescent-onset type",
+                "F91.3": "Oppositional defiant disorder",
+                "F91.8": "Other conduct disorders",
+                "F91.9": "Conduct disorder, unspecified",
+                "F93": "Emotional disorders with onset specific to childhood",
+                "F93.0": "Separation anxiety disorder of childhood",
+                "F93.8": "Other childhood emotional disorders",
+                "F93.9": "Childhood emotional disorder, unspecified",
+                "F94": "Disorders of social functioning with onset specific to childhood and adolescence",
+                "F94.0": "Selective mutism",
+                "F94.1": "Reactive attachment disorder of childhood",
+                "F94.2": "Disinhibited attachment disorder of childhood",
+                "F94.8": "Other childhood disorders of social functioning",
+                "F94.9": "Childhood disorder of social functioning, unspecified",
+                "F95": "Tic disorder",
+                "F95.0": "Transient tic disorder",
+                "F95.1": "Chronic motor or vocal tic disorder",
+                "F95.2": "Tourette's disorder",
+                "F95.8": "Other tic disorders",
+                "F95.9": "Tic disorder, unspecified",
+                "F98": "Other behavioral and emotional disorders with onset usually occurring in childhood and adolescence",
+                "F98.0": "Enuresis not due to a substance or known physiological condition",
+                "F98.1": "Encopresis not due to a substance or known physiological condition",
+                "F98.2": "Other feeding disorders of infancy and childhood",
+                "F98.21": "Rumination disorder of infancy and childhood",
+                "F98.29": "Other feeding disorders of infancy and early childhood",
+                "F98.3": "Pica of infancy and childhood",
+                "F98.4": "Stereotyped movement disorders",
+                "F98.5": "Adult onset fluency disorder",
+                "F98.8": "Other specified behavioral and emotional disorders with onset usually occurring in childhood and adolescence",
+                "F98.9": "Unspecified behavioral and emotional disorders with onset usually occurring in childhood and adolescence",
+                "F99": "Mental disorder, not otherwise specified",
+                "Z55": "Problems related to education and literacy",
+                "Z55.0": "Illiteracy and low-level literacy",
+                "Z55.1": "Schooling unavailable and unattainable",
+                "Z55.2": "Failed school examinations",
+                "Z55.3": "Underachievement in school",
+                "Z55.4": "Educational maladjustment and discord with teachers and classmates",
+                "Z55.5": "Less than a high school diploma",
+                "Z55.6": "Problems related to health literacy",
+                "Z55.8": "Other problems related to education and literacy",
+                "Z55.9": "Problems related to education and literacy, unspecified",
+                "Z56": "Problems related to employment and unemployment",
+                "Z56.0": "Unemployment, unspecified",
+                "Z56.1": "Change of job",
+                "Z56.2": "Threat of job loss",
+                "Z56.3": "Stressful work schedule",
+                "Z56.4": "Discord with boss and workmates",
+                "Z56.5": "Uncongenial work environment",
+                "Z56.6": "Other physical and mental strain related to work",
+                "Z56.8": "Other problems related to employment",
+                "Z56.81": "Sexual harassment on the job",
+                "Z56.82": "Military deployment status",
+                "Z56.89": "Other problems related to employment",
+                "Z56.9": "Unspecified problems related to employment",
+                "Z57": "Occupational exposure to risk factors",
+                "Z57.0": "Occupational exposure to noise",
+                "Z57.1": "Occupational exposure to radiation",
+                "Z57.2": "Occupational exposure to dust",
+                "Z57.3": "Occupational exposure to other air contaminants",
+                "Z57.31": "Occupational exposure to environmental tobacco smoke",
+                "Z57.39": "Occupational exposure to other air contaminants",
+                "Z57.4": "Occupational exposure to toxic agents in agriculture",
+                "Z57.5": "Occupational exposure to toxic agents in other industries",
+                "Z57.6": "Occupational exposure to extreme temperature",
+                "Z57.7": "Occupational exposure to vibration",
+                "Z57.8": "Occupational exposure to other risk factors",
+                "Z57.9": "Occupational exposure to unspecified risk factor",
+                "Z58": "Problems related to physical environment",
+                "Z58.6": "Inadequate drinking-water supply",
+                "Z58.8": "Other problems related to physical environment",
+                "Z58.81": "Basic services unavailable in physical environment",
+                "Z58.89": "Other problems related to physical environment",
+                "Z59": "Problems related to housing and economic circumstances",
+                "Z59.0": "Homelessness",
+                "Z59.00": "Homelessness unspecified",
+                "Z59.01": "Sheltered homelessness",
+                "Z59.02": "Unsheltered homelessness",
+                "Z59.1": "Inadequate housing",
+                "Z59.10": "Inadequate housing, unspecified",
+                "Z59.11": "Inadequate housing environmental temperature",
+                "Z59.12": "Inadequate housing utilities",
+                "Z59.19": "Other inadequate housing",
+                "Z59.2": "Discord with neighbors, lodgers and landlord",
+                "Z59.3": "Problems related to living in residential institution",
+                "Z59.4": "Lack of adequate food",
+                "Z59.41": "Food insecurity",
+                "Z59.48": "Other specified lack of adequate food",
+                "Z59.5": "Extreme poverty",
+                "Z59.6": "Low income",
+                "Z59.7": "Insufficient social insurance and welfare support",
+                "Z59.71": "Insufficient health insurance coverage",
+                "Z59.72": "Insufficient welfare support",
+                "Z59.8": "Other problems related to housing and economic circumstances",
+                "Z59.81": "Housing instability, housed",
+                "Z59.811": "Housing instability, housed, with risk of homelessness",
+                "Z59.812": "Housing instability, housed, homelessness in past 12 months",
+                "Z59.819": "Housing instability, housed unspecified",
+                "Z59.82": "Transportation insecurity",
+                "Z59.86": "Financial insecurity",
+                "Z59.861": "Financial insecurity, difficulty paying for utilities",
+                "Z59.868": "Other specified financial insecurity",
+                "Z59.869": "Financial insecurity, unspecified",
+                "Z59.87": "Material hardship due to limited financial resources, not elsewhere classified",
+                "Z59.89": "Other problems related to housing and economic circumstances",
+                "Z59.9": "Problem related to housing and economic circumstances, unspecified",
+                "Z60": "Problems related to social environment",
+                "Z60.0": "Problems of adjustment to life-cycle transitions",
+                "Z60.2": "Problems related to living alone",
+                "Z60.3": "Acculturation difficulty",
+                "Z60.4": "Social exclusion and rejection",
+                "Z60.5": "Target of (perceived) adverse discrimination and persecution",
+                "Z60.8": "Other problems related to social environment",
+                "Z60.9": "Problem related to social environment, unspecified",
+                "Z62": "Problems related to upbringing",
+                "Z62.0": "Inadequate parental supervision and control",
+                "Z62.1": "Parental overprotection",
+                "Z62.2": "Upbringing away from parents",
+                "Z62.21": "Child in welfare custody",
+                "Z62.22": "Institutional upbringing",
+                "Z62.23": "Child in custody of non-parental relative",
+                "Z62.24": "Child in custody of non-relative guardian",
+                "Z62.29": "Other upbringing away from parents",
+                "Z62.3": "Hostility towards and scapegoating of child",
+                "Z62.6": "Inappropriate (excessive) parental pressure",
+                "Z62.8": "Other specified problems related to upbringing",
+                "Z62.81": "Personal history of abuse in childhood",
+                "Z62.810": "Personal history of physical and sexual abuse in childhood",
+                "Z62.811": "Personal history of psychological abuse in childhood",
+                "Z62.812": "Personal history of neglect in childhood",
+                "Z62.813": "Personal history of forced labor or sexual exploitation in childhood",
+                "Z62.814": "Personal history of child financial abuse",
+                "Z62.815": "Personal history of intimate partner abuse in childhood",
+                "Z62.819": "Personal history of unspecified abuse in childhood",
+                "Z62.82": "Parent-child conflict",
+                "Z62.820": "Parent-biological child conflict",
+                "Z62.821": "Parent-adopted child conflict",
+                "Z62.822": "Parent-foster child conflict",
+                "Z62.823": "Parent-step child conflict",
+                "Z62.83": "Non-parental relative or guardian-child conflict",
+                "Z62.831": "Non-parental relative-child conflict",
+                "Z62.832": "Non-relative guardian-child conflict",
+                "Z62.833": "Group home staff-child conflict",
+                "Z62.89": "Other specified problems related to upbringing",
+                "Z62.890": "Parent-child estrangement NEC",
+                "Z62.891": "Sibling rivalry",
+                "Z62.892": "Runaway [from current living environment]",
+                "Z62.898": "Other specified problems related to upbringing",
+                "Z62.9": "Problem related to upbringing, unspecified",
+                "Z63": "Other problems related to primary support group, including family circumstances",
+                "Z63.0": "Problems in relationship with spouse or partner",
+                "Z63.1": "Problems in relationship with in-laws",
+                "Z63.3": "Absence of family member",
+                "Z63.31": "Absence of family member due to military deployment",
+                "Z63.32": "Other absence of family member",
+                "Z63.4": "Disappearance and death of family member",
+                "Z63.5": "Disruption of family by separation and divorce",
+                "Z63.6": "Dependent relative needing care at home",
+                "Z63.7": "Other stressful life events affecting family and household",
+                "Z63.71": "Stress on family due to return of family member from military deployment",
+                "Z63.72": "Alcoholism and drug addiction in family",
+                "Z63.79": "Other stressful life events affecting family and household",
+                "Z63.8": "Other specified problems related to primary support group",
+                "Z63.9": "Problem related to primary support group, unspecified",
+                "Z64": "Problems related to certain psychosocial circumstances",
+                "Z64.0": "Problems related to unwanted pregnancy",
+                "Z64.1": "Problems related to multiparity",
+                "Z64.4": "Discord with counselors",
+                "Z65": "Problems related to other psychosocial circumstances",
+                "Z65.0": "Conviction in civil and criminal proceedings without imprisonment",
+                "Z65.1": "Imprisonment and other incarceration",
+                "Z65.2": "Problems related to release from prison",
+                "Z65.3": "Problems related to other legal circumstances",
+                "Z65.4": "Victim of crime and terrorism",
+                "Z65.5": "Exposure to disaster, war and other hostilities",
+                "Z65.8": "Other specified problems related to psychosocial circumstances",
+                "Z65.9": "Problem related to unspecified psychosocial circumstances",
+                "Z71.89": "Other specified counseling",
+                "Z73": "Problems related to life management difficulty",
+                "Z73.0": "Burn-out",
+                "Z73.1": "Type A behavior pattern",
+                "Z73.2": "Lack of relaxation and leisure",
+                "Z73.3": "Stress, not elsewhere classified",
+                "Z73.4": "Inadequate social skills, not elsewhere classified",
+                "Z73.5": "Social role conflict, not elsewhere classified",
+                "Z73.6": "Limitation of activities due to disability",
+                "Z73.8": "Other problems related to life management difficulty",
+                "Z73.81": "Behavioral insomnia of childhood",
+                "Z73.810": "Behavioral insomnia of childhood, sleep-onset association type",
+                "Z73.811": "Behavioral insomnia of childhood, limit setting type",
+                "Z73.812": "Behavioral insomnia of childhood, combined type",
+                "Z73.819": "Behavioral insomnia of childhood, unspecified type",
+                "Z73.82": "Dual sensory impairment",
+                "Z73.89": "Other problems related to life management difficulty",
+                "Z73.9": "Problem related to life management difficulty, unspecified",
+                "Z81": "Family history of mental and behavioral disorders",
+                "Z81.0": "Family history of intellectual disabilities",
+                "Z81.1": "Family history of alcohol abuse and dependence",
+                "Z81.2": "Family history of tobacco abuse and dependence",
+                "Z81.3": "Family history of other psychoactive substance abuse and dependence",
+                "Z81.4": "Family history of other substance abuse and dependence",
+                "Z81.8": "Family history of other mental and behavioral disorders",
+                "Z82": "Family history of certain disabilities and chronic diseases (leading to disablement)",
+                "Z82.0": "Family history of epilepsy and other diseases of the nervous system",
+                "Z82.1": "Family history of blindness and visual loss",
+                "Z82.2": "Family history of deafness and hearing loss",
+                "Z82.3": "Family history of stroke",
+                "Z82.4": "Family history of ischemic heart disease and other diseases of the circulatory system",
+                "Z82.41": "Family history of sudden cardiac death",
+                "Z82.49": "Family history of ischemic heart disease and other diseases of the circulatory system",
+                "Z82.5": "Family history of asthma and other chronic lower respiratory diseases",
+                "Z82.6": "Family history of arthritis and other diseases of the musculoskeletal system and connective tissue",
+                "Z82.61": "Family history of arthritis",
+                "Z82.62": "Family history of osteoporosis",
+                "Z82.69": "Family history of other diseases of the musculoskeletal system and connective tissue",
+                "Z82.7": "Family history of congenital malformations, deformations and chromosomal abnormalities",
+                "Z82.71": "Family history of polycystic kidney",
+                "Z82.79": "Family history of other congenital malformations, deformations and chromosomal abnormalities",
+                "Z82.8": "Family history of other disabilities and chronic diseases leading to disablement, not elsewhere classified",
+                "Z83": "Family history of other specific disorders",
+                "Z83.0": "Family history of human immunodeficiency virus [HIV] disease",
+                "Z83.1": "Family history of other infectious and parasitic diseases",
+                "Z83.2": "Family history of diseases of the blood and blood-forming organs and certain disorders involving the immune mechanism",
+                "Z83.3": "Family history of diabetes mellitus",
+                "Z83.4": "Family history of other endocrine, nutritional and metabolic diseases",
+                "Z83.41": "Family history of multiple endocrine neoplasia [MEN] syndrome",
+                "Z83.42": "Family history of familial hypercholesterolemia",
+                "Z83.43": "Family history of other disorder of lipoprotein metabolism and other lipidemias",
+                "Z83.430": "Family history of elevated lipoprotein(a)",
+                "Z83.438": "Family history of other disorder of lipoprotein metabolism and other lipidemia",
+                "Z83.49": "Family history of other endocrine, nutritional and metabolic diseases",
+                "Z83.5": "Family history of eye and ear disorders",
+                "Z83.51": "Family history of eye disorders",
+                "Z83.511": "Family history of glaucoma",
+                "Z83.518": "Family history of other specified eye disorder",
+                "Z83.52": "Family history of ear disorders",
+                "Z83.6": "Family history of other diseases of the respiratory system",
+                "Z83.7": "Family history of diseases of the digestive system",
+                "Z83.71": "Family history of colonic polyps",
+                "Z83.710": "Family history of adenomatous and serrated polyps",
+                "Z83.711": "Family history of hyperplastic colon polyps",
+                "Z83.718": "Family history of other colon polyps",
+                "Z83.719": "Family history of colon polyps, unspecified",
+                "Z83.72": "Family history of familial adenomatous polyposis",
+                "Z83.79": "Family history of other diseases of the digestive system",
+                "Z84": "Family history of other conditions",
+                "Z84.0": "Family history of diseases of the skin and subcutaneous tissue",
+                "Z84.1": "Family history of disorders of kidney and ureter",
+                "Z84.11": "Family history of APOL1-mediated kidney disease [AMKD]",
+                "Z84.19": "Family history of other disorders of kidney and ureter",
+                "Z84.2": "Family history of other diseases of the genitourinary system",
+                "Z84.3": "Family history of consanguinity",
+                "Z84.8": "Family history of other specified conditions",
+                "Z84.81": "Family history of carrier of genetic disease",
+                "Z84.82": "Family history of sudden infant death syndrome",
+                "Z84.89": "Family history of other specified conditions",
+                "Z84.A": "Family history of exposure to diethylstilbestrol",
+                "Z91.4": "Personal history of psychological trauma, not elsewhere classified",
+                "Z91.5": "Personal history of self-harm"
+            }
+
+            const MODALITIES = {
+                "act": "Acceptance and Commitment Therapy (ACT)",
+                "behavioral": "Behavioral Therapy",
+                "cbt": "Cognitive Behavioral Therapy (CBT)",
+                "couples": "Couples/Relationship Therapy",
+                "dbt": "Dialectical Behavior Therapy (DBT)",
+                "emdr": "Eye Movement Desensitization and Reprocessing (EMDR)",
+                "exposure": "Exposure Therapy",
+                "group": "Group Therapy",
+                "mi": "Motivational Interviewing (MI)",
+                "narrative": "Narrative Therapy",
+                "person-centered": "Person-Centered Therapy (Rogerian)",
+                "psychodynamic": "Psychodynamic Therapy",
+                "sfbt": "Solution-Focused Brief Therapy (SFBT)",
+                "other": "Other (Specify)"
+            };
+
+            const MODELS_BY_PROVIDER = {
+                "gemini": [
+                    { value: "gemini-2.5-flash-preview-09-2025", name: "Gemini 2.5 Flash (Latest)" },
+                    { value: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
+                    { value: "gemini-1.5-pro", name: "Gemini 1.5 Pro" },
+                    { value: "gemini-pro", name: "Gemini 1.5 Flash" }
+                ],
+                "vertex": [
+                    { value: "gemini-2.0-flash-001", name: "Gemini 2.0 Flash (Vertex)" },
+                    { value: "gemini-1.5-flash-002", name: "Gemini 1.5 Flash (Vertex)" },
+                    { value: "gemini-1.5-pro-002", name: "Gemini 1.5 Pro (Vertex)" }
+                ],
+                "chatgpt": [
+                    { value: "gpt-4o", name: "GPT-4o" },
+                    { value: "gpt-4-turbo", name: "GPT-4 Turbo" },
+                    { value: "gpt-4", name: "GPT-4" },
+                    { value: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" }
+                ],
+                "open-webui": [
+                    { value: "meta-llama/llama-3.1-8b-instruct", name: "Llama 3.1 8B" },
+                    { value: "meta-llama/llama-3.1-70b-instruct", name: "Llama 3.1 70B" },
+                    { value: "meta-llama/llama-2-70b-chat", name: "Llama 2 70B Chat" },
+                    { value: "mistralai/Mistral-7B-Instruct-v0.1", name: "Mistral 7B" },
+                    { value: "neural-chat-7b-v3-1", name: "Neural Chat 7B" }
+                ]
+            };
+
+            // --- DOM ELEMENTS ---
+            const apiSelect = document.getElementById('api-select');
+            const modelSelectContainer = document.getElementById('model-select-container');
+            const modelSelect = document.getElementById('model-select');
+            const apiKeyInput = document.getElementById('api-key');
+            const apiUrlContainer = document.getElementById('api-url-container');
+            const apiUrlInput = document.getElementById('api-url');
+            const vertexProjectContainer = document.getElementById('vertex-project-container');
+            const vertexProjectIdInput = document.getElementById('vertex-project-id');
+            const vertexLocationContainer = document.getElementById('vertex-location-container');
+            const vertexLocationInput = document.getElementById('vertex-location');
+            const vertexProxyContainer = document.getElementById('vertex-proxy-container');
+            const vertexProxyUrlInput = document.getElementById('vertex-proxy-url');
+            const saveApiBtn = document.getElementById('save-api-btn');
+            const treatmentFocus = document.getElementById('treatment-focus');
+            const diagnosisContainer = document.getElementById('diagnosis-container');
+            const addDiagBtn = document.getElementById('add-diag-btn');
+            const diagnosisSearchInput = document.getElementById('diagnosis-search');
+            const diagnosisDrop = document.getElementById('diagnosis-dropdown');
+            const selectedDiagnosesContainer = document.getElementById('selected-diagnoses');
+            const modalityContainer = document.getElementById('modality-container');
+            const addModalityBtn = document.getElementById('add-modality-btn');
+            const modalitySearchInput = document.getElementById('modality-search');
+            const modalityDropdown = document.getElementById('modality-dropdown');
+            const selectedModalitiesContainer = document.getElementById('selected-modalities');
+            const goalsPerDiagInput = document.getElementById('goals-per-diag');
+            const objectivesPerGoalInput = document.getElementById('objectives-per-goal');
+            const generateBtn = document.getElementById('generate-btn');
+            const generateBtnText = document.getElementById('generate-btn-text');
+            const generateIcon = document.getElementById('generate-icon');
+            const loader = document.getElementById('loader');
+            const outputSection = document.getElementById('output-section');
+            const planContainer = document.getElementById('plan-container');
+            const clipboardToast = document.getElementById('clipboard-toast');
+            const settingsSavedToast = document.getElementById('settings-saved-toast');
+            const errorModal = document.getElementById('error-modal');
+            const errorMessage = document.getElementById('error-message');
+            const closeErrorModal = document.getElementById('close-error-modal');
+            const okErrorModal = document.getElementById('ok-error-modal');
+
+            // Arrays to store selected items
+            let selectedDiagnoses = [];
+            let selectedModalities = [];
+
+
+            // --- FUNCTIONS ---
+
+            /**
+             * Shows the custom error modal with a specific message.
+             * @param {string} message - The error message to display.
+             */
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorModal.style.display = 'flex';
+            }
+
+            /**
+             * Hides the custom error modal.
+             */
+            function hideError() {
+                errorModal.style.display = 'none';
+            }
+
+            /**
+             * Shows a toast notification.
+             * @param {string} message - The message for the toast.
+             */
+            function showToast(message, type = 'info') {
+                let toastElement;
+                if (type === 'success') {
+                    toastElement = settingsSavedToast;
+                    toastElement.textContent = message;
+                } else {
+                    toastElement = clipboardToast;
+                    toastElement.textContent = message;
+                }
+                
+                toastElement.classList.remove('hidden');
+                if (type === 'info') {
+                    toastElement.classList.add('show');
+                }
+
+                setTimeout(() => {
+                    if (type === 'info') {
+                        toastElement.classList.remove('show');
+                    } else {
+                        toastElement.classList.add('hidden');
+                    }
+                }, 2000);
+            }
+
+            /**
+             * Copies text to the clipboard using a fallback for iFrames.
+             * @param {string} text - The text to copy.
+             */
+            function copyToClipboard(text) {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed'; // Prevent scrolling to bottom
+                textarea.style.opacity = 0;
+                document.body.appendChild(textarea);
+                textarea.select();
+                try {
+                    document.execCommand('copy');
+                    showToast('Copied to clipboard!', 'info');
+                } catch (err) { // <--- FIXED SYNTAX ERROR HERE
+                    console.error('Failed to copy text: ', err);
+                    showError('Failed to copy text. Please copy manually.');
+                }
+                document.body.removeChild(textarea);
+            }
+
+            /**
+             * Creates and appends a new diagnosis row to the container.
+             */
+            function addDiagnosisRow() {
+                const rowId = `diag-row-${Date.now()}`;
+                const row = document.createElement('div');
+                row.className = 'flex items-center space-x-2 p-3 bg-gray-50 rounded-lg border border-gray-200';
+                row.id = rowId;
+
+                let optionsHtml = '';
+                for (const [code, name] of Object.entries(ICD10_CODES)) {
+                    optionsHtml += `<option value="${code}">${code} - ${name}</option>`;
+                }
+
+                row.innerHTML = `
+                    <input type="checkbox" class="diag-select-checkbox h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
+                    <select class="diag-select-dropdown w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white focus:ring-blue-500 focus:border-blue-500">
+                        ${optionsHtml}
+                    </select>
+                    <input type="text" class="diag-other-input w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 hidden" placeholder="Enter custom diagnosis">
+                    <button type="button" class="remove-diag-btn p-2 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                `;
+                diagnosisContainer.appendChild(row);
+            }
+
+            /**
+             * Handles changes on diagnosis dropdowns to show/hide the 'Other' input.
+             * @param {Event} e - The change event.
+             */
+            function handleDiagnosisChange(e) {
+                if (e.target.classList.contains('diag-select-dropdown')) {
+                    const row = e.target.closest('.flex');
+                    const otherInput = row.querySelector('.diag-other-input');
+                    const dropdown = row.querySelector('.diag-select-dropdown');
+                    if (e.target.value === 'OTHER') {
+                        otherInput.classList.remove('hidden');
+                        dropdown.classList.add('hidden'); // Hide dropdown
+                    }
+                }
+            }
+            
+            /**
+             * Handles clicks within the diagnosis container for removing rows.
+             * @param {Event} e - The click event.
+             */
+            function handleDiagnosisClick(e) {
+                const removeBtn = e.target.closest('.remove-diag-btn');
+                if (removeBtn) {
+                    removeBtn.closest('.flex').remove();
+                }
+            }
+
+            /**
+             * Creates and appends a new modality row to the container.
+             */
+            function addModalityRow() {
+                const rowId = `modality-row-${Date.now()}`;
+                const row = document.createElement('div');
+                row.className = 'flex items-center space-x-2 p-3 bg-gray-50 rounded-lg border border-gray-200';
+                row.id = rowId;
+
+                let optionsHtml = '';
+                for (const [code, name] of Object.entries(MODALITIES)) {
+                    optionsHtml += `<option value="${code}">${name}</option>`;
+                }
+
+                row.innerHTML = `
+                    <input type="checkbox" class="modality-select-checkbox h-5 w-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
+                    <select class="modality-select-dropdown w-full p-2 border border-gray-300 rounded-md shadow-sm bg-white focus:ring-blue-500 focus:border-blue-500">
+                        ${optionsHtml}
+                    </select>
+                    <input type="text" class="modality-other-input w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 hidden" placeholder="Enter custom modality">
+                    <button type="button" class="remove-modality-btn p-2 text-red-500 hover:text-red-700 hover:bg-red-100 rounded-full transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                `;
+                modalityContainer.appendChild(row);
+            }
+
+            /**
+             * Handles changes on modality dropdowns to show/hide the 'Other' input.
+             */
+            function handleModalityChange(e) {
+                if (e.target.classList.contains('modality-select-dropdown')) {
+                    const row = e.target.closest('.flex');
+                    const otherInput = row.querySelector('.modality-other-input');
+                    const dropdown = row.querySelector('.modality-select-dropdown');
+                    if (e.target.value === 'other') {
+                        otherInput.classList.remove('hidden');
+                        dropdown.classList.add('hidden'); // Hide dropdown
+                    }
+                }
+            }
+
+            /**
+             * Handles clicks within the modality container for removing rows.
+             */
+            function handleModalityClick(e) {
+                const removeBtn = e.target.closest('.remove-modality-btn');
+                if (removeBtn) {
+                    removeBtn.closest('.flex').remove();
+                }
+            }
+
+            /**
+             * Filters diagnoses based on search term and updates dropdown.
+             * @param {string} searchTerm - The search term from user input.
+             */
+            function filterDiagnoses(searchTerm) {
+                const lowerSearchTerm = searchTerm.toLowerCase();
+                diagnosisDrop.innerHTML = '';
+
+                if (searchTerm.length === 0) {
+                    diagnosisDrop.style.display = 'none';
+                    return;
+                }
+
+                const matchedCodes = [];
+                for (const [code, name] of Object.entries(ICD10_CODES)) {
+                    if (code.toLowerCase().includes(lowerSearchTerm) || name.toLowerCase().includes(lowerSearchTerm)) {
+                        matchedCodes.push({ code, name });
+                    }
+                }
+
+                if (matchedCodes.length === 0) {
+                    diagnosisDrop.innerHTML = '<div class="p-3 text-gray-500">No matching diagnoses found</div>';
+                    diagnosisDrop.style.display = 'block';
+                    return;
+                }
+
+                // Limit results to 10 for performance
+                matchedCodes.slice(0, 10).forEach(({ code, name }) => {
+                    const item = document.createElement('div');
+                    item.className = 'p-3 cursor-pointer hover:bg-blue-50 border-b border-gray-200 transition-colors';
+                    item.innerHTML = `<div class="font-semibold text-gray-900">${code}</div><div class="text-sm text-gray-600">${name}</div>`;
+                    item.addEventListener('click', () => addSelectedDiagnosis(code, name));
+                    diagnosisDrop.appendChild(item);
+                });
+
+                diagnosisDrop.style.display = 'block';
+            }
+
+            /**
+             * Filters modalities based on search term and updates dropdown.
+             * @param {string} searchTerm - The search term from user input.
+             */
+            function filterModalities(searchTerm) {
+                const lowerSearchTerm = searchTerm.toLowerCase();
+                modalityDropdown.innerHTML = '';
+
+                if (searchTerm.length === 0) {
+                    modalityDropdown.style.display = 'none';
+                    return;
+                }
+
+                const matchedModalities = [];
+                for (const [key, name] of Object.entries(MODALITIES)) {
+                    if (key.toLowerCase().includes(lowerSearchTerm) || name.toLowerCase().includes(lowerSearchTerm)) {
+                        matchedModalities.push({ key, name });
+                    }
+                }
+
+                if (matchedModalities.length === 0) {
+                    modalityDropdown.innerHTML = '<div class="p-3 text-gray-500">No matching modalities found</div>';
+                    modalityDropdown.style.display = 'block';
+                    return;
+                }
+
+                matchedModalities.forEach(({ key, name }) => {
+                    const item = document.createElement('div');
+                    item.className = 'p-3 cursor-pointer hover:bg-blue-50 border-b border-gray-200 transition-colors';
+                    item.innerHTML = `<div class="font-semibold text-gray-900">${name}</div>`;
+                    item.addEventListener('click', () => addSelectedModality(key, name));
+                    modalityDropdown.appendChild(item);
+                });
+
+                modalityDropdown.style.display = 'block';
+            }
+
+            /**
+             * Adds a selected diagnosis to the list and displays it as a tag.
+             * @param {string} code - The ICD-10 code.
+             * @param {string} name - The diagnosis name.
+             */
+            function addSelectedDiagnosis(code, name) {
+                // Check if already selected
+                if (selectedDiagnoses.some(d => d.code === code)) {
+                    return;
+                }
+
+                selectedDiagnoses.push({ code, name });
+                diagnosisSearchInput.value = '';
+                diagnosisDrop.style.display = 'none';
+                renderSelectedDiagnoses();
+            }
+
+            /**
+             * Removes a diagnosis from the selected list.
+             * @param {string} code - The ICD-10 code to remove.
+             */
+            window.removeSelectedDiagnosis = function(code) {
+                selectedDiagnoses = selectedDiagnoses.filter(d => d.code !== code);
+                renderSelectedDiagnoses();
+            }
+
+            /**
+             * Renders the selected diagnoses as tags/pills.
+             */
+            function renderSelectedDiagnoses() {
+                selectedDiagnosesContainer.innerHTML = '';
+                selectedDiagnoses.forEach(({ code, name }) => {
+                    const tag = document.createElement('div');
+                    tag.className = 'inline-flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm m-1';
+                    tag.innerHTML = `
+                        <span>${code} - ${name}</span>
+                        <button type="button" class="ml-2 text-blue-600 hover:text-blue-800 font-bold" onclick="removeSelectedDiagnosis('${code}')">×</button>
+                    `;
+                    selectedDiagnosesContainer.appendChild(tag);
+                });
+            }
+
+            /**
+             * Adds a selected modality to the list and displays it as a tag.
+             * @param {string} key - The modality key.
+             * @param {string} name - The modality name.
+             */
+            function addSelectedModality(key, name) {
+                // Check if already selected
+                if (selectedModalities.some(m => m.key === key)) {
+                    return;
+                }
+
+                selectedModalities.push({ key, name });
+                modalitySearchInput.value = '';
+                modalityDropdown.style.display = 'none';
+                renderSelectedModalities();
+            }
+
+            /**
+             * Removes a modality from the selected list.
+             * @param {string} key - The modality key to remove.
+             */
+            window.removeSelectedModality = function(key) {
+                selectedModalities = selectedModalities.filter(m => m.key !== key);
+                renderSelectedModalities();
+            }
+
+            /**
+             * Renders the selected modalities as tags/pills.
+             */
+            function renderSelectedModalities() {
+                selectedModalitiesContainer.innerHTML = '';
+                selectedModalities.forEach(({ key, name }) => {
+                    const tag = document.createElement('div');
+                    tag.className = 'inline-flex items-center space-x-2 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm m-1';
+                    tag.innerHTML = `
+                        <span>${name}</span>
+                        <button type="button" class="ml-2 text-green-600 hover:text-green-800 font-bold" onclick="removeSelectedModality('${key}')">×</button>
+                    `;
+                    selectedModalitiesContainer.appendChild(tag);
+                });
+            }
+
+            /**
+             * Handles clicks within the plan container for removing items or copying text.
+             * @param {Event} e - The click event.
+             */
+            function handlePlanClick(e) {
+                const removeBtn = e.target.closest('.remove-item-btn');
+                const goalText = e.target.closest('.goal-text');
+                const objectiveText = e.target.closest('.objective-text');
+
+                if (removeBtn) {
+                    removeBtn.closest('.goal, .objective').remove();
+                } else if (goalText) {
+                    copyToClipboard(goalText.textContent);
+                } else if (objectiveText) {
+                    copyToClipboard(objectiveText.textContent);
+                }
+            }
+
+            /**
+             * Toggles the loading state of the generate button.
+             * @param {boolean} isLoading - Whether to show the loading state.
+             */
+            function setGeneratingState(isLoading) {
+                if (isLoading) {
+                    generateBtn.disabled = true;
+                    generateBtn.classList.add('opacity-75', 'cursor-not-allowed');
+                    generateBtnText.textContent = 'Generating...';
+                    generateIcon.classList.add('hidden');
+                    loader.classList.remove('hidden');
+                } else {
+                    generateBtn.disabled = false;
+                    generateBtn.classList.remove('opacity-75', 'cursor-not-allowed');
+                    generateBtnText.textContent = 'Generate Plan';
+                    generateIcon.classList.remove('hidden');
+                    loader.classList.add('hidden');
+                }
+            }
+
+            /**
+             * Defines the JSON schema for the AI's response.
+             */
+            function getResponseSchema() {
+                return {
+                    "type": "OBJECT",
+                    "properties": {
+                        "treatmentPlan": {
+                            "type": "ARRAY",
+                            "items": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "diagnosis": { "type": "STRING" },
+                                    "goals": {
+                                        "type": "ARRAY",
+                                        "items": {
+                                            "type": "OBJECT",
+                                            "properties": {
+                                                "goal": { "type": "STRING", "description": "The goal in the format 'Client will... (treatment goal), resulting in (treatment outcome).'" },
+                                                "timeline": { "type": "STRING", "enum": ["3 months", "6 months", "9 months", "12 months"] },
+                                                "objectives": {
+                                                    "type": "ARRAY",
+                                                    "items": {
+                                                        "type": "OBJECT",
+                                                        "properties": {
+                                                            "objective": { "type": "STRING" },
+                                                            "timeline": { "type": "STRING", "enum": ["3 months", "6 months", "9 months", "12 months"] }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": ["treatmentPlan"]
+                };
+            }
+
+            /**
+             * Fetches the treatment plan from the Gemini API.
+             * @param {string} apiKey - The user's API key.
+             * @param {string} systemPrompt - The system instruction.
+             * @param {string} userQuery - The user's prompt.
+             * @param {object} schema - The JSON schema for the response.
+             */
+            async function fetchGeminiPlan(apiKey, systemPrompt, userQuery, schema) {
+                const selectedModel = modelSelect.value;
+                if (!selectedModel) {
+                    throw new Error("No AI model selected.");
+                }
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent`;
+
+                const payload = {
+                    contents: [{ parts: [{ text: userQuery }] }],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: schema,
+                        temperature: 0.7,
+                    }
+                };
+
+                let attempt = 0;
+                const maxAttempts = 5;
+                let delay = 1000; // 1 second
+
+                while (attempt < maxAttempts) {
+                    try {
+                        const response = await fetch(`${apiUrl}?key=${apiKey}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (response.status === 429) { // Throttling
+                            throw new Error('Rate limited');
+                        }
+                        
+                        if (!response.ok) {
+                            const errorBody = await response.json();
+                            throw new Error(`API Error: ${errorBody.error?.message || response.statusText}`);
+                        }
+
+                        const result = await response.json();
+                        const candidate = result.candidates?.[0];
+                        
+                        if (candidate && candidate.content?.parts?.[0]?.text) {
+                            return candidate.content.parts[0].text;
+                        } else {
+                            throw new Error("Invalid response structure from API.");
+                        }
+
+                    } catch (error) {
+                        attempt++;
+                        if (error.message === 'Rate limited' && attempt < maxAttempts) {
+                            await new Promise(res => setTimeout(res, delay));
+                            delay *= 2; // Exponential backoff
+                        } else {
+                            throw error; // Re-throw last error
+                        }
+                    }
+                }
+                throw new Error("Failed to get response from API after multiple attempts.");
+            }
+
+            async function fetchVertexPlan(credential, projectId, location, systemPrompt, userQuery, schema, proxyUrl = '') {
+                const selectedModel = modelSelect.value;
+                if (!selectedModel) {
+                    throw new Error("No AI model selected.");
+                }
+                if (!projectId || !location) {
+                    throw new Error("Vertex Project ID and location are required.");
+                }
+
+                const payload = {
+                    contents: [{ parts: [{ text: userQuery }] }],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        responseSchema: schema,
+                        temperature: 0.7,
+                    }
+                };
+
+                const normalizedProxyUrl = (proxyUrl || '').trim().replace(/\/+$/, '');
+                if (normalizedProxyUrl) {
+                    const response = await fetch(`${normalizedProxyUrl}/vertex/generate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            projectId,
+                            location,
+                            model: selectedModel,
+                            payload
+                        })
+                    });
+                    if (!response.ok) {
+                        const errorBody = await response.text();
+                        throw new Error(`Proxy Error: ${errorBody || response.statusText}`);
+                    }
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+                    if (candidate && candidate.content?.parts?.[0]?.text) {
+                        return candidate.content.parts[0].text;
+                    }
+                    throw new Error("Invalid response structure from proxy.");
+                }
+
+                const isApiKey = /^AIza[0-9A-Za-z\-_]{20,}$/.test((credential || '').trim());
+                if (isApiKey) {
+                    return fetchGeminiPlan(credential, systemPrompt, userQuery, schema);
+                }
+                const authHeaders = isApiKey
+                    ? {}
+                    : { 'Authorization': `Bearer ${credential}` };
+                const authQuery = isApiKey ? `?key=${encodeURIComponent(credential)}` : '';
+
+                const apiUrl = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${selectedModel}:generateContent${authQuery}`;
+
+                let attempt = 0;
+                const maxAttempts = 5;
+                let delay = 1000;
+
+                while (attempt < maxAttempts) {
+                    try {
+                        const response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                ...authHeaders
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (response.status === 429) {
+                            throw new Error('Rate limited');
+                        }
+
+                        if (!response.ok) {
+                            const errorBody = await response.json();
+                            throw new Error(`API Error: ${errorBody.error?.message || response.statusText}`);
+                        }
+
+                        const result = await response.json();
+                        const candidate = result.candidates?.[0];
+
+                        if (candidate && candidate.content?.parts?.[0]?.text) {
+                            return candidate.content.parts[0].text;
+                        } else {
+                            throw new Error("Invalid response structure from API.");
+                        }
+                    } catch (error) {
+                        attempt++;
+                        if (error.message === 'Rate limited' && attempt < maxAttempts) {
+                            await new Promise(res => setTimeout(res, delay));
+                            delay *= 2;
+                        } else {
+                            throw error;
+                        }
+                    }
+                }
+
+                throw new Error("Failed to get response from API after multiple attempts.");
+            }
+
+            /**
+             * Fetches the treatment plan from the OpenAI API.
+             * @param {string} apiKey - The user's API key.
+             * @param {string} systemPrompt - The system instruction.
+             * @param {string} userQuery - The user's prompt.
+             */
+            async function fetchOpenAIPlan(apiKey, systemPrompt, userQuery) {
+                const selectedModel = modelSelect.value;
+                if (!selectedModel) {
+                    throw new Error("No AI model selected.");
+                }
+
+                const apiUrl = 'https://api.openai.com/v1/chat/completions';
+
+                const payload = {
+                    model: selectedModel,
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: userQuery }
+                    ],
+                    temperature: 0.7,
+                    response_format: { type: "json_object" }
+                };
+
+                let attempt = 0;
+                const maxAttempts = 5;
+                let delay = 1000;
+
+                while (attempt < maxAttempts) {
+                    try {
+                        const response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${apiKey}`
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (response.status === 429) {
+                            throw new Error('Rate limited');
+                        }
+
+                        if (!response.ok) {
+                            const errorBody = await response.json();
+                            throw new Error(`API Error: ${errorBody.error?.message || response.statusText}`);
+                        }
+
+                        const result = await response.json();
+                        
+                        if (result.choices?.[0]?.message?.content) {
+                            return result.choices[0].message.content;
+                        } else {
+                            throw new Error("Invalid response structure from API.");
+                        }
+
+                    } catch (error) {
+                        attempt++;
+                        if (error.message === 'Rate limited' && attempt < maxAttempts) {
+                            await new Promise(res => setTimeout(res, delay));
+                            delay *= 2;
+                        } else {
+                            throw error;
+                        }
+                    }
+                }
+                throw new Error("Failed to get response from API after multiple attempts.");
+            }
+
+            /**
+             * Fetches the treatment plan from the Open WebUI API.
+             * @param {string} apiKey - The user's API key.
+             * @param {string} baseUrl - The base URL of the Open WebUI instance.
+             * @param {string} systemPrompt - The system instruction.
+             * @param {string} userQuery - The user's prompt.
+             */
+            async function fetchOpenWebUIPlan(apiKey, baseUrl, systemPrompt, userQuery) {
+                const selectedModel = modelSelect.value;
+                if (!selectedModel) {
+                    throw new Error("No AI model selected.");
+                }
+
+                const apiUrl = `${baseUrl}/api/chat/completions`;
+
+                const payload = {
+                    model: selectedModel,
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: userQuery }
+                    ],
+                    temperature: 0.7,
+                    stream: false
+                };
+
+                let attempt = 0;
+                const maxAttempts = 5;
+                let delay = 1000;
+
+                while (attempt < maxAttempts) {
+                    try {
+                        const response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${apiKey}`
+                            },
+                            body: JSON.stringify(payload)
+                        });
+
+                        if (response.status === 429) {
+                            throw new Error('Rate limited');
+                        }
+
+                        if (!response.ok) {
+                            const errorBody = await response.json();
+                            throw new Error(`API Error: ${errorBody.error?.message || response.statusText}`);
+                        }
+
+                        const result = await response.json();
+                        
+                        if (result.choices?.[0]?.message?.content) {
+                            return result.choices[0].message.content;
+                        } else {
+                            throw new Error("Invalid response structure from API.");
+                        }
+
+                    } catch (error) {
+                        attempt++;
+                        if (error.message === 'Rate limited' && attempt < maxAttempts) {
+                            await new Promise(res => setTimeout(res, delay));
+                            delay *= 2;
+                        } else {
+                            throw error;
+                        }
+                    }
+                }
+                throw new Error("Failed to get response from API after multiple attempts.");
+            }
+
+            /**
+             * Renders the generated plan into the DOM.
+             * @param {object[]} plan - The array of diagnosis plans.
+             */
+            function renderPlan(plan) {
+                planContainer.innerHTML = ''; // Clear previous plan
+                
+                if (!plan || plan.length === 0) {
+                    planContainer.innerHTML = '<p class="text-gray-500">The AI did not return a plan. Try adjusting your focus or prompt.</p>';
+                    return;
+                }
+
+                plan.forEach(diagPlan => {
+                    const diagElement = document.createElement('div');
+                    diagElement.className = 'space-y-4';
+                    
+                    let goalsHtml = '';
+                    if (diagPlan.goals && diagPlan.goals.length > 0) {
+                        diagPlan.goals.forEach(goalItem => {
+                            let objectivesHtml = '';
+                            if (goalItem.objectives && goalItem.objectives.length > 0) {
+                                goalItem.objectives.forEach(objItem => {
+                                    objectivesHtml += `
+                                        <div class="objective ml-8 pl-4 border-l-2 border-gray-200 flex justify-between items-start space-x-2 py-2">
+                                            <p class="objective-text flex-1 text-gray-700 p-1 rounded hover:bg-gray-100">
+                                                <span class="font-semibold text-gray-800">Objective:</span> ${objItem.objective}
+                                            </p>
+                                            <div class="flex-shrink-0 flex items-center space-x-2">
+                                                <span class="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">${objItem.timeline || 'N/A'}</span>
+                                                <button class="remove-item-btn p-1 text-gray-400 hover:text-red-500 hover:bg-red-100 rounded-full">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    `;
+                                });
+                            }
+
+                            goalsHtml += `
+                                <div class="goal bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                                    <div class="flex justify-between items-start space-x-2">
+                                        <p class="goal-text flex-1 text-blue-900 p-1 rounded hover:bg-blue-100">
+                                            <span class="font-semibold text-blue-900">Goal:</span> ${goalItem.goal}
+                                        </p>
+                                        <div class="flex-shrink-0 flex items-center space-x-2">
+                                            <span class="text-xs font-medium bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">${goalItem.timeline || 'N/A'}</span>
+                                            <button class="remove-item-btn p-1 text-blue-400 hover:text-red-600 hover:bg-red-100 rounded-full">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="objectives-list mt-3 space-y-2">
+                                        ${objectivesHtml}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    }
+
+                    diagElement.innerHTML = `
+                        <h3 class="text-xl font-semibold text-gray-700">Diagnosis: ${diagPlan.diagnosis}</h3>
+                        <div class="goals-list space-y-3">
+                            ${goalsHtml || '<p class="text-gray-500">No goals generated for this diagnosis.</p>'}
+                        </div>
+                    `;
+                    planContainer.appendChild(diagElement);
+                });
+
+                outputSection.classList.remove('hidden');
+            }
+
+            /**
+             * Main handler for the 'Generate' button.
+             * Collects inputs, builds prompts, calls API, and renders result.
+             */
+            async function handleGenerateClick() {
+                // 1. Get API selection and key
+                const selectedApi = apiSelect.value;
+                const apiKey = apiKeyInput.value.trim();
+                const selectedModel = modelSelect.value;
+                const vertexProjectId = vertexProjectIdInput.value.trim();
+                const vertexLocation = (vertexLocationInput.value.trim() || 'us-central1');
+                const vertexProxyUrl = vertexProxyUrlInput.value.trim();
+                
+                if (!apiKey && !(selectedApi === 'vertex' && vertexProxyUrl)) {
+                    showError(`Please enter your ${selectedApi.toUpperCase()} API Key.`);
+                    apiKeyInput.focus();
+                    return;
+                }
+
+                if (!selectedModel) {
+                    showError('Please select an AI model from the dropdown.');
+                    modelSelect.focus();
+                    return;
+                }
+
+                // Validate API URL for Open WebUI
+                let apiUrl = null;
+                if (selectedApi === 'open-webui') {
+                    apiUrl = apiUrlInput.value.trim();
+                    if (!apiUrl) {
+                        showError('Please enter the Open WebUI API Base URL.');
+                        apiUrlInput.focus();
+                        return;
+                    }
+                } else if (selectedApi === 'vertex') {
+                    if (!vertexProjectId) {
+                        showError('Please enter the Vertex Project ID.');
+                        vertexProjectIdInput.focus();
+                        return;
+                    }
+                    if (!vertexLocation) {
+                        showError('Please enter the Vertex location.');
+                        vertexLocationInput.focus();
+                        return;
+                    }
+                }
+
+                // 2. Collect Inputs
+                const focus = treatmentFocus.value.trim();
+                const goalsPerDiag = goalsPerDiagInput.value;
+                const objectivesPerGoal = objectivesPerGoalInput.value;
+
+                if (!focus) {
+                    showError('Please fill out the "Treatment Plan Focus" field.');
+                    treatmentFocus.focus();
+                    return;
+                }
+
+                // 2. Collect selected diagnoses and modalities from the new search-based arrays
+                if (selectedDiagnoses.length === 0) {
+                    showError('Please search and select at least one diagnosis to address.');
+                    diagnosisSearchInput.focus();
+                    return;
+                }
+
+                const diagnosisData = selectedDiagnoses; // Use the global selectedDiagnoses array
+                const modalityData = selectedModalities.map(m => m.name); // Extract just the names
+
+                // 3. Set loading state
+                setGeneratingState(true);
+                planContainer.innerHTML = '';
+                outputSection.classList.add('hidden');
+
+                // 4. Build Prompts
+                const systemPrompt = `You are an expert mental health clinician specializing in creating detailed, actionable, and client-centered treatment plans.
+Your goal is to generate a plan based on user specifications.
+You must respond with a JSON object containing a "treatmentPlan" array.
+All goals MUST be in the format: "Client will... (treatment goal), resulting in (treatment outcome)."
+For each goal and objective, you must estimate a timeline from: 3 months, 6 months, 9 months, or 12 months.`;
+
+                const diagnosesString = diagnosisData.map(d => `- ${d.name} (${d.code})`).join('\n');
+                const modalitiesString = modalityData.length > 0 
+                    ? `Modalities to incorporate:\n${modalityData.map(m => `- ${m}`).join('\n')}`
+                    : 'Modalities: General therapeutic approaches.';
+
+                const userQuery = `Please generate a treatment plan with the following parameters:
+
+Treatment Focus: ${focus}
+
+${modalitiesString}
+
+For each of the following diagnoses, please generate ${goalsPerDiag} goals.
+For each goal, please generate ${objectivesPerGoal} objectives.
+
+Diagnoses to address:
+${diagnosesString}
+
+Ensure every goal and objective has a timeline (3, 6, 9, or 12 months) and that all goals strictly follow the format: 'Client will... (treatment goal), resulting in (treatment outcome).'
+Tailor the language of the goals and objectives to be consistent with the requested modalities (if any are provided).
+
+Respond ONLY with a JSON object in this format:
+{
+  "treatmentPlan": [
+    {
+      "diagnosis": "diagnosis name",
+      "goals": [
+        {
+          "goal": "Client will...",
+          "timeline": "3 months",
+          "objectives": [
+            {
+              "objective": "objective description",
+              "timeline": "3 months"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}`;
+
+                // 5. Call API and Render
+                try {
+                    let responseText;
+                    
+                    if (selectedApi === 'gemini') {
+                        const schema = getResponseSchema();
+                        responseText = await fetchGeminiPlan(apiKey, systemPrompt, userQuery, schema);
+                    } else if (selectedApi === 'vertex') {
+                        const schema = getResponseSchema();
+                        responseText = await fetchVertexPlan(apiKey, vertexProjectId, vertexLocation, systemPrompt, userQuery, schema, vertexProxyUrl);
+                    } else if (selectedApi === 'chatgpt') {
+                        responseText = await fetchOpenAIPlan(apiKey, systemPrompt, userQuery);
+                    } else if (selectedApi === 'open-webui') {
+                        responseText = await fetchOpenWebUIPlan(apiKey, apiUrl, systemPrompt, userQuery);
+                    }
+                    
+                    const responseData = JSON.parse(responseText);
+                    
+                    if (responseData && responseData.treatmentPlan) {
+                        renderPlan(responseData.treatmentPlan);
+                    } else {
+                        throw new Error("AI response was missing the 'treatmentPlan' field.");
+                    }
+                    
+                } catch (error) {
+                    console.error('Generation Error:', error);
+                    showError(`An error occurred: ${error.message}`);
+                } finally {
+                    setGeneratingState(false);
+                }
+            }
+
+            /**
+             * Saves API settings to local storage.
+             */
+            function saveApiSettings() {
+                try {
+                    localStorage.setItem('apiProvider', apiSelect.value);
+                    localStorage.setItem('apiKey', apiKeyInput.value);
+                    localStorage.setItem('apiModel', modelSelect.value);
+                    localStorage.setItem('apiUrl', apiUrlInput.value);
+                    localStorage.setItem('vertexProjectId', vertexProjectIdInput.value);
+                    localStorage.setItem('vertexLocation', vertexLocationInput.value || 'us-central1');
+                    localStorage.setItem('vertexProxyUrl', vertexProxyUrlInput.value || '');
+                    showToast('API Settings Saved!', 'success');
+                } catch (e) {
+                    console.error('Failed to save settings to localStorage:', e);
+                    showError('Could not save settings. Your browser might have localStorage disabled.');
+                }
+            }
+
+            /**
+             * Loads API settings from local storage.
+             */
+            function loadApiSettings() {
+                try {
+                    const provider = localStorage.getItem('apiProvider');
+                    const key = localStorage.getItem('apiKey');
+                    const model = localStorage.getItem('apiModel');
+                    const url = localStorage.getItem('apiUrl');
+                    const vertexProjectId = localStorage.getItem('vertexProjectId');
+                    const vertexLocation = localStorage.getItem('vertexLocation');
+                    const vertexProxyUrl = localStorage.getItem('vertexProxyUrl');
+
+                    if (provider) {
+                        apiSelect.value = provider;
+                        updateModelDropdown(provider, model); // Update dropdown and set model
+                    }
+                    if (key) {
+                        apiKeyInput.value = key;
+                    }
+                    if (url) {
+                        apiUrlInput.value = url;
+                    }
+                    if (vertexProjectId) {
+                        vertexProjectIdInput.value = vertexProjectId;
+                    }
+                    if (vertexLocation) {
+                        vertexLocationInput.value = vertexLocation;
+                    }
+                    if (vertexProxyUrl) {
+                        vertexProxyUrlInput.value = vertexProxyUrl;
+                    }
+                } catch (e) {
+                    console.error('Failed to load settings from localStorage:', e);
+                }
+            }
+
+            /**
+             * Updates the model dropdown based on the selected provider.
+             * @param {string} provider - The selected provider (e.g., 'gemini').
+             * @param {string | null} [selectedModel=null] - The model to pre-select.
+             */
+            function updateModelDropdown(provider, selectedModel = null) {
+                const models = MODELS_BY_PROVIDER[provider] || [];
+                modelSelect.innerHTML = ''; // Clear existing options
+
+                if (models.length > 0) {
+                    models.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model.value;
+                        option.textContent = model.name;
+                        modelSelect.appendChild(option);
+                    });
+                    
+                    if (selectedModel) {
+                        modelSelect.value = selectedModel;
+                    }
+
+                    modelSelectContainer.classList.remove('hidden');
+                } else {
+                    modelSelectContainer.classList.add('hidden');
+                }
+
+                // Show/hide API URL field based on provider
+                if (provider === 'open-webui') {
+                    apiUrlContainer.classList.remove('hidden');
+                } else {
+                    apiUrlContainer.classList.add('hidden');
+                }
+
+                if (provider === 'vertex') {
+                    vertexProjectContainer.classList.remove('hidden');
+                    vertexLocationContainer.classList.remove('hidden');
+                    vertexProxyContainer.classList.remove('hidden');
+                    apiKeyInput.placeholder = 'Enter Vertex credential (optional if proxy used)';
+                } else {
+                    vertexProjectContainer.classList.add('hidden');
+                    vertexLocationContainer.classList.add('hidden');
+                    vertexProxyContainer.classList.add('hidden');
+                    apiKeyInput.placeholder = 'Enter your API Key';
+                }
+            }
+
+
+            // --- EVENT LISTENERS ---
+            
+            // Search input listeners for diagnoses
+            diagnosisSearchInput.addEventListener('input', (e) => {
+                filterDiagnoses(e.target.value);
+            });
+
+            // Close diagnosis dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!diagnosisSearchInput.contains(e.target) && !diagnosisDrop.contains(e.target)) {
+                    diagnosisDrop.style.display = 'none';
+                }
+            });
+
+            // Search input listeners for modalities
+            modalitySearchInput.addEventListener('input', (e) => {
+                filterModalities(e.target.value);
+            });
+
+            // Close modality dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!modalitySearchInput.contains(e.target) && !modalityDropdown.contains(e.target)) {
+                    modalityDropdown.style.display = 'none';
+                }
+            });
+
+            generateBtn.addEventListener('click', handleGenerateClick);
+            planContainer.addEventListener('click', handlePlanClick);
+            closeErrorModal.addEventListener('click', hideError);
+            okErrorModal.addEventListener('click', hideError);
+
+            saveApiBtn.addEventListener('click', saveApiSettings);
+            apiSelect.addEventListener('change', (e) => updateModelDropdown(e.target.value));
+            
+            // --- INITIALIZATION ---
+            loadApiSettings(); // Load saved settings on startup
+        });
+    </script>
+</body>
+</html>
