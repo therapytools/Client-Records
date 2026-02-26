@@ -1,10 +1,12 @@
 name: Publish Updater JSON
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
 
 jobs:
   publish-updater:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -21,6 +23,7 @@ jobs:
           node-version: '20'
 
       - name: Generate updater JSON
+        id: generate_updater
         run: |
           # This script fetches the latest release assets and generates the latest.json file
           # required by Tauri's updater plugin.
@@ -30,8 +33,10 @@ jobs:
             https://api.github.com/repos/${{ github.repository }}/releases/latest)
           
           VERSION=$(echo "$RELEASE_DATA" | jq -r .tag_name | sed 's/^v//')
+          TAG_NAME=$(echo "$RELEASE_DATA" | jq -r .tag_name)
           NOTES=$(echo "$RELEASE_DATA" | jq -r .body)
           PUB_DATE=$(echo "$RELEASE_DATA" | jq -r .published_at)
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
           
           # Initialize the JSON structure
           echo "{" > latest.json
@@ -96,6 +101,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: latest.json
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ steps.generate_updater.outputs.tag_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
