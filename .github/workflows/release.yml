@@ -23,11 +23,6 @@ jobs:
 
       - name: Fix git safe.directory
         run: git config --global --add safe.directory '*'
-        with:
-          fetch-depth: 0
-
-      - name: Fix git safe.directory
-        run: git config --global --add safe.directory '*'
 
       - name: Install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
@@ -60,6 +55,6 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Client Records ${{ github.ref_name }}'
           releaseBody: 'See the assets to download this version and install.'
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}

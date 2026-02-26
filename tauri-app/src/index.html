@@ -257,6 +257,8 @@
             border-left: 4px solid var(--item-border-color);
             position: relative;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            -webkit-user-drag: element;
+            user-select: none;
         }
         .client-item:hover {
             transform: translateX(5px);
@@ -3782,9 +3784,11 @@ Requirements:
 
             // --- Drag and Drop Client Reordering ---
             let draggedClientId = null;
+            const closestClientItem = (eventTarget) =>
+                eventTarget instanceof Element ? eventTarget.closest('.client-item') : null;
 
             clientListEl.addEventListener('dragstart', (e) => {
-                const clientItem = e.target.closest('.client-item');
+                const clientItem = closestClientItem(e.target);
                 if (clientItem) {
                     draggedClientId = clientItem.dataset.clientId;
                     if (e.dataTransfer) {
@@ -3797,7 +3801,7 @@ Requirements:
             });
 
             clientListEl.addEventListener('dragend', (e) => {
-                const clientItem = e.target.closest('.client-item');
+                const clientItem = closestClientItem(e.target);
                 if (clientItem) {
                     clientItem.classList.remove('dragging');
                 }
@@ -3813,7 +3817,7 @@ Requirements:
                 if (e.dataTransfer) {
                     e.dataTransfer.dropEffect = 'move';
                 }
-                const targetItem = e.target.closest('.client-item');
+                const targetItem = closestClientItem(e.target);
                 if (targetItem && targetItem.dataset.clientId !== draggedClientId) {
                     // This is where you could add a visual indicator if desired
                 }
@@ -3821,7 +3825,7 @@ Requirements:
 
             clientListEl.addEventListener('drop', (e) => {
                 e.preventDefault();
-                const targetItem = e.target.closest('.client-item');
+                const targetItem = closestClientItem(e.target);
                 const sourceId = draggedClientId || e.dataTransfer?.getData('text/plain');
                 if (targetItem && sourceId) {
                     const targetId = targetItem.dataset.clientId;
