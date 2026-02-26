@@ -252,13 +252,13 @@
             margin-bottom: 8px;
             padding: 12px;
             border-radius: 6px;
-            cursor: pointer;
+            cursor: grab;
             transition: all 0.2s ease;
             border-left: 4px solid var(--item-border-color);
             position: relative;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            -webkit-user-drag: element;
             user-select: none;
+            touch-action: none;
         }
         .client-item:hover {
             transform: translateX(5px);
@@ -271,7 +271,19 @@
         }
         
         .client-item.dragging {
-            opacity: 0.5;
+            opacity: 0.4;
+            cursor: grabbing;
+            transform: scale(0.97);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            z-index: 1000;
+        }
+        .client-item.drag-over-above {
+            border-top: 3px solid var(--accent-color, #007aff);
+            margin-top: -1px;
+        }
+        .client-item.drag-over-below {
+            border-bottom: 3px solid var(--accent-color, #007aff);
+            margin-bottom: 5px;
         }
         
         .action-buttons {
@@ -3032,7 +3044,7 @@ Requirements:
                     return;
                 }
                 clientListEl.innerHTML = clients.map(client => `
-                    <div class="client-item ${client.id === selectedClientId ? 'active' : ''}" data-client-id="${client.id}" draggable="true">
+                    <div class="client-item ${client.id === selectedClientId ? 'active' : ''}" data-client-id="${client.id}">
                         ${client.name}
                         <div class="action-buttons">
                             <button class="action-btn edit-btn" title="Edit Name">✏️</button>
@@ -3782,69 +3794,94 @@ Requirements:
                 }
             });
 
-            // --- Drag and Drop Client Reordering ---
-            let draggedClientId = null;
-            const closestClientItem = (eventTarget) =>
-                eventTarget instanceof Element ? eventTarget.closest('.client-item') : null;
+            // --- Drag and Drop Client Reordering (pointer events) ---
+            let dragState = null; // { clientId, startY, element, threshold: false }
 
-            clientListEl.addEventListener('dragstart', (e) => {
-                const clientItem = closestClientItem(e.target);
-                if (clientItem) {
-                    draggedClientId = clientItem.dataset.clientId;
-                    if (e.dataTransfer) {
-                        e.dataTransfer.effectAllowed = 'move';
-                        e.dataTransfer.setData('text/plain', draggedClientId || '');
-                    }
-                    // Add a class for visual feedback
-                    setTimeout(() => clientItem.classList.add('dragging'), 0);
-                }
+            clientListEl.addEventListener('pointerdown', (e) => {
+                const clientItem = e.target.closest('.client-item');
+                // Don't initiate drag on action buttons
+                if (!clientItem || e.target.closest('.action-buttons')) return;
+                dragState = {
+                    clientId: clientItem.dataset.clientId,
+                    startY: e.clientY,
+                    element: clientItem,
+                    threshold: false
+                };
+                clientItem.setPointerCapture(e.pointerId);
             });
 
-            clientListEl.addEventListener('dragend', (e) => {
-                const clientItem = closestClientItem(e.target);
-                if (clientItem) {
-                    clientItem.classList.remove('dragging');
+            clientListEl.addEventListener('pointermove', (e) => {
+                if (!dragState) return;
+                const dy = Math.abs(e.clientY - dragState.startY);
+                // Require 5px of movement before starting drag (avoids interfering with clicks)
+                if (!dragState.threshold) {
+                    if (dy < 5) return;
+                    dragState.threshold = true;
+                    dragState.element.classList.add('dragging');
                 }
-                draggedClientId = null;
-            });
-
-            clientListEl.addEventListener('dragenter', (e) => {
-                e.preventDefault();
-            });
-
-            clientListEl.addEventListener('dragover', (e) => {
-                e.preventDefault(); // Necessary to allow dropping
-                if (e.dataTransfer) {
-                    e.dataTransfer.dropEffect = 'move';
-                }
-                const targetItem = closestClientItem(e.target);
-                if (targetItem && targetItem.dataset.clientId !== draggedClientId) {
-                    // This is where you could add a visual indicator if desired
-                }
-            });
-
-            clientListEl.addEventListener('drop', (e) => {
-                e.preventDefault();
-                const targetItem = closestClientItem(e.target);
-                const sourceId = draggedClientId || e.dataTransfer?.getData('text/plain');
-                if (targetItem && sourceId) {
-                    const targetId = targetItem.dataset.clientId;
-                    
-                    const draggedIndex = data.clients.findIndex(c => c.id === sourceId);
-                    const targetIndex = data.clients.findIndex(c => c.id === targetId);
-
-                    if (draggedIndex > -1 && targetIndex > -1) {
-                        // Remove the dragged item
-                        const [draggedItem] = data.clients.splice(draggedIndex, 1);
-                        // Insert it at the target's position
-                        const insertIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
-                        data.clients.splice(insertIndex, 0, draggedItem);
-                        
-                        markDirty();
-                        renderClients(); // Re-render to reflect the new order
+                // Find the item under the pointer
+                const items = clientListEl.querySelectorAll('.client-item');
+                items.forEach(item => {
+                    item.classList.remove('drag-over-above', 'drag-over-below');
+                });
+                for (const item of items) {
+                    if (item.dataset.clientId === dragState.clientId) continue;
+                    const rect = item.getBoundingClientRect();
+                    const midY = rect.top + rect.height / 2;
+                    if (e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                        if (e.clientY < midY) {
+                            item.classList.add('drag-over-above');
+                        } else {
+                            item.classList.add('drag-over-below');
+                        }
+                        break;
                     }
                 }
-                draggedClientId = null;
+            });
+
+            clientListEl.addEventListener('pointerup', (e) => {
+                if (!dragState) return;
+                const { clientId: sourceId, threshold } = dragState;
+                // Clean up visual state
+                dragState.element.classList.remove('dragging');
+                const items = clientListEl.querySelectorAll('.client-item');
+                let targetId = null;
+                let insertAfter = false;
+                items.forEach(item => {
+                    if (item.classList.contains('drag-over-above')) {
+                        targetId = item.dataset.clientId;
+                        insertAfter = false;
+                    } else if (item.classList.contains('drag-over-below')) {
+                        targetId = item.dataset.clientId;
+                        insertAfter = true;
+                    }
+                    item.classList.remove('drag-over-above', 'drag-over-below');
+                });
+                dragState = null;
+
+                if (!threshold || !targetId || targetId === sourceId) return;
+
+                const draggedIndex = data.clients.findIndex(c => c.id === sourceId);
+                const targetIndex = data.clients.findIndex(c => c.id === targetId);
+                if (draggedIndex === -1 || targetIndex === -1) return;
+
+                const [draggedItem] = data.clients.splice(draggedIndex, 1);
+                // After removing, recalculate target position
+                let newTargetIndex = data.clients.findIndex(c => c.id === targetId);
+                if (insertAfter) newTargetIndex += 1;
+                data.clients.splice(newTargetIndex, 0, draggedItem);
+
+                markDirty();
+                renderClients();
+            });
+
+            clientListEl.addEventListener('pointercancel', () => {
+                if (!dragState) return;
+                dragState.element.classList.remove('dragging');
+                clientListEl.querySelectorAll('.client-item').forEach(item => {
+                    item.classList.remove('drag-over-above', 'drag-over-below');
+                });
+                dragState = null;
             });
 
             appointmentListEl.addEventListener('click', (e) => {
