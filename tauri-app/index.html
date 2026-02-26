@@ -4489,8 +4489,10 @@ Requirements:
                 const clientItem = e.target.closest('.client-item');
                 if (clientItem) {
                     draggedClientId = clientItem.dataset.clientId;
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', draggedClientId);
+                    if (e.dataTransfer) {
+                        e.dataTransfer.effectAllowed = 'move';
+                        e.dataTransfer.setData('text/plain', draggedClientId || '');
+                    }
                     // Add a class for visual feedback
                     setTimeout(() => clientItem.classList.add('dragging'), 0);
                 }
@@ -4510,7 +4512,9 @@ Requirements:
 
             clientListEl.addEventListener('dragover', (e) => {
                 e.preventDefault(); // Necessary to allow dropping
-                e.dataTransfer.dropEffect = 'move';
+                if (e.dataTransfer) {
+                    e.dataTransfer.dropEffect = 'move';
+                }
                 const targetItem = e.target.closest('.client-item');
                 if (targetItem && targetItem.dataset.clientId !== draggedClientId) {
                     // This is where you could add a visual indicator if desired
@@ -4520,22 +4524,25 @@ Requirements:
             clientListEl.addEventListener('drop', (e) => {
                 e.preventDefault();
                 const targetItem = e.target.closest('.client-item');
-                if (targetItem && draggedClientId) {
+                const sourceId = draggedClientId || e.dataTransfer?.getData('text/plain');
+                if (targetItem && sourceId) {
                     const targetId = targetItem.dataset.clientId;
                     
-                    const draggedIndex = data.clients.findIndex(c => c.id === draggedClientId);
+                    const draggedIndex = data.clients.findIndex(c => c.id === sourceId);
                     const targetIndex = data.clients.findIndex(c => c.id === targetId);
 
                     if (draggedIndex > -1 && targetIndex > -1) {
                         // Remove the dragged item
                         const [draggedItem] = data.clients.splice(draggedIndex, 1);
                         // Insert it at the target's position
-                        data.clients.splice(targetIndex, 0, draggedItem);
+                        const insertIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+                        data.clients.splice(insertIndex, 0, draggedItem);
                         
                         markDirty();
                         renderClients(); // Re-render to reflect the new order
                     }
                 }
+                draggedClientId = null;
             });
 
             appointmentListEl.addEventListener('click', (e) => {

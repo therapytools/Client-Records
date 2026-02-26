@@ -16,6 +16,8 @@
     "sql:allow-execute",
     "store:default",
     "http:default",
+    "updater:default",
+    "process:default",
     {
       "identifier": "http:default",
       "allow": [
