@@ -26,18 +26,17 @@
       "endpoints": [
         "https://github.com/therapytools/Client-Records/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlGQTUzN0ZCNTZCRDU1OTUKUldTVlZiMVcremVsbjY4b2pEWkIzTnZ3dGRtMnVUR3hRQThOeWxIb0lQSEtXNlJ4SmRXaXZjWDgK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQxNkVFMDk4QjUyRjE1MTAKUldRUUZTKzFtT0J1MGJ0NGJYbHRCc1lzamZBc3JCejNSKzVvZjRmaXNoeUVyNXY3bEFhUGF0ZkMK"
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["app", "dmg"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
+      "icons/icon.icns"
     ]
   }
 }
