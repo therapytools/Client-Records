@@ -48,6 +48,19 @@ for f in ['src-tauri/tauri.conf.json', 'package.json']:
 sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
 echo "  Updated src-tauri/Cargo.toml"
 
+# Update version displayed next to "Client Data Organizer" in all HTML files
+echo "==> Updating version in HTML files..."
+for f in \
+  "$TAURI_DIR/index.html" \
+  "$TAURI_DIR/src/index.html" \
+  "$SCRIPT_DIR/ClientRecords/index.html" \
+  "$SCRIPT_DIR/ClientRecords/test.html"; do
+  if [ -f "$f" ]; then
+    sed -i '' "s|Client Data Organizer <span[^>]*>v[0-9][^<]*</span>|Client Data Organizer <span style=\"font-size: 0.8rem; font-weight: normal; vertical-align: middle;\">v${VERSION}</span>|g" "$f"
+    echo "  Updated $f"
+  fi
+done
+
 # --- Build ---
 echo "==> Building Tauri app..."
 export TAURI_SIGNING_PRIVATE_KEY=$(cat "$KEY_PATH")
