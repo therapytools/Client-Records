@@ -65,11 +65,13 @@ done
 echo "==> Building Tauri app..."
 export TAURI_SIGNING_PRIVATE_KEY=$(cat "$KEY_PATH")
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$KEY_PASSWORD"
-npm run tauri build -- --bundles app
+npm run tauri build
 
 BUNDLE_DIR="src-tauri/target/release/bundle/macos"
+DMG_DIR="src-tauri/target/release/bundle/dmg"
 APP_NAME="Client Records.app"
 TARGZ="Client.Records_${VERSION}_aarch64.app.tar.gz"
+DMG="Client Records_${VERSION}_aarch64.dmg"
 
 # --- Create updater bundle ---
 echo "==> Creating updater tar.gz..."
@@ -100,11 +102,13 @@ gh release create "$TAG" \
   --notes "macOS (Apple Silicon) release." \
   "$TAURI_DIR/$BUNDLE_DIR/$TARGZ" \
   "$TAURI_DIR/$SIG_FILE" \
+  "$TAURI_DIR/$DMG_DIR/$DMG" \
   2>/dev/null || {
     echo "  Release exists, uploading assets..."
     gh release upload "$TAG" -R "$REPO" --clobber \
       "$TAURI_DIR/$BUNDLE_DIR/$TARGZ" \
-      "$TAURI_DIR/$SIG_FILE"
+      "$TAURI_DIR/$SIG_FILE" \
+      "$TAURI_DIR/$DMG_DIR/$DMG"
   }
 
 # --- Generate and upload latest.json ---
