@@ -5,3 +5,4 @@ __pycache__/
 tauri-app/node_modules/
 tauri-app/src-tauri/target/
 tauri-app/dist/
+test-clone/
