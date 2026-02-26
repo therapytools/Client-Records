@@ -1,0 +1,96 @@
+name: Publish Updater JSON
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish-updater:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate updater JSON
+        run: |
+          # This script fetches the latest release assets and generates the latest.json file
+          # required by Tauri's updater plugin.
+          
+          # Get the latest release data
+          RELEASE_DATA=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/releases/latest)
+          
+          VERSION=$(echo "$RELEASE_DATA" | jq -r .tag_name | sed 's/^v//')
+          NOTES=$(echo "$RELEASE_DATA" | jq -r .body)
+          PUB_DATE=$(echo "$RELEASE_DATA" | jq -r .published_at)
+          
+          # Initialize the JSON structure
+          echo "{" > latest.json
+          echo "  \"version\": \"$VERSION\"," >> latest.json
+          echo "  \"notes\": $(echo "$NOTES" | jq -R -s .)," >> latest.json
+          echo "  \"pub_date\": \"$PUB_DATE\"," >> latest.json
+          echo "  \"platforms\": {" >> latest.json
+          
+          # Process assets
+          ASSETS=$(echo "$RELEASE_DATA" | jq -c '.assets[]')
+          FIRST=true
+          
+          for ASSET in $ASSETS; do
+            NAME=$(echo "$ASSET" | jq -r .name)
+            URL=$(echo "$ASSET" | jq -r .browser_download_url)
+            
+            # Only process .tar.gz and .zip files (the update bundles)
+            if [[ "$NAME" == *".tar.gz" ]] || [[ "$NAME" == *".zip" ]]; then
+              # Determine platform
+              PLATFORM=""
+              if [[ "$NAME" == *"darwin"* ]] || [[ "$NAME" == *"macos"* ]]; then
+                if [[ "$NAME" == *"aarch64"* ]]; then
+                  PLATFORM="darwin-aarch64"
+                elif [[ "$NAME" == *"x86_64"* ]]; then
+                  PLATFORM="darwin-x86_64"
+                else
+                  PLATFORM="darwin-universal"
+                fi
+              elif [[ "$NAME" == *"windows"* ]] || [[ "$NAME" == *".zip" ]]; then
+                PLATFORM="windows-x86_64"
+              elif [[ "$NAME" == *"linux"* ]] || [[ "$NAME" == *"ubuntu"* ]]; then
+                PLATFORM="linux-x86_64"
+              fi
+              
+              if [ -n "$PLATFORM" ]; then
+                # Get the signature file content
+                SIG_URL="${URL}.sig"
+                SIGNATURE=$(curl -sL "$SIG_URL")
+                
+                if [ -n "$SIGNATURE" ]; then
+                  if [ "$FIRST" = true ]; then
+                    FIRST=false
+                  else
+                    echo "    ," >> latest.json
+                  fi
+                  
+                  echo "    \"$PLATFORM\": {" >> latest.json
+                  echo "      \"signature\": \"$SIGNATURE\"," >> latest.json
+                  echo "      \"url\": \"$URL\"" >> latest.json
+                  echo "    }" >> latest.json
+                fi
+              fi
+            fi
+          done
+          
+          echo "  }" >> latest.json
+          echo "}" >> latest.json
+          
+          cat latest.json
+
+      - name: Upload latest.json to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: latest.json
+          tag_name: ${{ github.event.release.tag_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

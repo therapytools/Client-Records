@@ -1653,7 +1653,7 @@
 
     <div class="container" id="appContainer" style="display: none;">
         <div class="header">
-            <h1>Client Data Organizer <span style="font-size: 0.8rem; font-weight: normal; vertical-align: middle;">v.1.0.0a</span></h1>
+            <h1>Client Data Organizer <span style="font-size: 0.8rem; font-weight: normal; vertical-align: middle;">v1.0.0</span></h1>
             <div id="autoSaveIndicator" class="autosave-indicator" style="opacity: 0;">
                 <span id="saveStatus"></span>
             </div>
@@ -1667,6 +1667,7 @@
                     <button id="configureBackupBtn" class="menu-item-btn">Set Secondary Backup Location</button>
                     <button id="clearBackupBtn" class="menu-item-btn">Clear Secondary Backup</button>
                     <button id="manualSaveBtn" class="menu-item-btn save">Save Now</button>
+                    <button id="checkForUpdatesBtn" class="menu-item-btn">Check for Updates</button>
                     <button id="settingsBtn" class="menu-item-btn settings">Settings</button>
                     <button id="themeToggleBtn" class="menu-item-btn theme" title="Toggle Theme">Theme</button>
                     <button id="lockScreenBtn" class="menu-item-btn" title="Lock Screen">Lock Screen</button>
@@ -2421,8 +2422,10 @@
 
     <script type="module">
         import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
-        import { save } from '@tauri-apps/plugin-dialog';
+        import { save, ask, message } from '@tauri-apps/plugin-dialog';
         import { writeTextFile } from '@tauri-apps/plugin-fs';
+        import { check } from '@tauri-apps/plugin-updater';
+        import { relaunch } from '@tauri-apps/plugin-process';
         import { checkFirstLogin, createUser, loginUser, getLastAuthError, changePassword, requestPasswordReset, confirmPasswordReset, requestEmailVerification, confirmEmailVerification, updateRecoverySettings, getRecoverySettings, testSmtpSettings, deleteUserAccount, saveState, loadState, isDatabaseInitialized, importEncryptedSqlDump, importSqlDump, exportEncryptedSqlDump } from './src/database.js';
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -2467,6 +2470,7 @@
             const sessionDurationEl = document.getElementById('sessionDuration');
             // Settings and Modal Elements
             const settingsBtn = document.getElementById('settingsBtn');
+            const checkForUpdatesBtn = document.getElementById('checkForUpdatesBtn');
             const settingsModal = document.getElementById('settingsModal');
             const closeSettingsBtn = document.getElementById('closeSettingsBtn');
             const informedConsentBtn = document.getElementById('informedConsentBtn');
@@ -4485,6 +4489,8 @@ Requirements:
                 const clientItem = e.target.closest('.client-item');
                 if (clientItem) {
                     draggedClientId = clientItem.dataset.clientId;
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', draggedClientId);
                     // Add a class for visual feedback
                     setTimeout(() => clientItem.classList.add('dragging'), 0);
                 }
@@ -4498,8 +4504,13 @@ Requirements:
                 draggedClientId = null;
             });
 
+            clientListEl.addEventListener('dragenter', (e) => {
+                e.preventDefault();
+            });
+
             clientListEl.addEventListener('dragover', (e) => {
                 e.preventDefault(); // Necessary to allow dropping
+                e.dataTransfer.dropEffect = 'move';
                 const targetItem = e.target.closest('.client-item');
                 if (targetItem && targetItem.dataset.clientId !== draggedClientId) {
                     // This is where you could add a visual indicator if desired
@@ -7022,6 +7033,7 @@ This error cannot be fixed within this application's code; it requires a configu
                 clearBackupBtn,
                 manualSaveBtn,
                 settingsBtn,
+                checkForUpdatesBtn,
                 lockScreenBtn
             ].filter(Boolean).forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -7033,6 +7045,51 @@ This error cannot be fixed within this application's code; it requires a configu
             clearBackupBtn?.addEventListener('click', clearSecondaryBackupLocation);
 
             settingsBtn.addEventListener('click', () => settingsModal.classList.remove('hidden'));
+            
+            checkForUpdatesBtn?.addEventListener('click', async () => {
+                try {
+                    const update = await check();
+                    if (update) {
+                        const yes = await ask(`Update to ${update.version} is available!\n\nRelease notes: ${update.body}\n\nDo you want to download and install it now?`, {
+                            title: 'Update Available',
+                            kind: 'info',
+                        });
+                        if (yes) {
+                            let downloaded = 0;
+                            let contentLength = 0;
+                            await update.downloadAndInstall((event) => {
+                                switch (event.event) {
+                                    case 'Started':
+                                        contentLength = event.data.contentLength;
+                                        console.log(`started downloading ${event.data.contentLength} bytes`);
+                                        break;
+                                    case 'Progress':
+                                        downloaded += event.data.chunkLength;
+                                        console.log(`downloaded ${downloaded} from ${contentLength}`);
+                                        break;
+                                    case 'Finished':
+                                        console.log('download finished');
+                                        break;
+                                }
+                            });
+                            
+                            const restart = await ask('Update installed successfully. Do you want to restart the app now?', {
+                                title: 'Restart Required',
+                                kind: 'info',
+                            });
+                            if (restart) {
+                                await relaunch();
+                            }
+                        }
+                    } else {
+                        await message('You are on the latest version.', { title: 'No Updates Available', kind: 'info' });
+                    }
+                } catch (error) {
+                    console.error('Failed to check for updates:', error);
+                    await message(`Failed to check for updates: ${error.message || error}`, { title: 'Error', kind: 'error' });
+                }
+            });
+
             closeSettingsBtn.addEventListener('click', () => settingsModal.classList.add('hidden'));
             lockScreenBtn.addEventListener('click', () => lockApp());
             settingsModal.addEventListener('click', (e) => {

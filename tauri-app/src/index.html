@@ -987,7 +987,7 @@
 
     <div class="container" id="appContainer" style="display: none;">
         <div class="header">
-            <h1>Client Data Organizer <span style="font-size: 0.8rem; font-weight: normal; vertical-align: middle;">v.1.0.0a</span></h1>
+            <h1>Client Data Organizer <span style="font-size: 0.8rem; font-weight: normal; vertical-align: middle;">v1.0.0</span></h1>
             <div id="autoSaveIndicator" class="autosave-indicator" style="opacity: 0;">
                 <span id="saveStatus"></span>
             </div>
@@ -3787,6 +3787,8 @@ Requirements:
                 const clientItem = e.target.closest('.client-item');
                 if (clientItem) {
                     draggedClientId = clientItem.dataset.clientId;
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', draggedClientId);
                     // Add a class for visual feedback
                     setTimeout(() => clientItem.classList.add('dragging'), 0);
                 }
@@ -3800,8 +3802,13 @@ Requirements:
                 draggedClientId = null;
             });
 
+            clientListEl.addEventListener('dragenter', (e) => {
+                e.preventDefault();
+            });
+
             clientListEl.addEventListener('dragover', (e) => {
                 e.preventDefault(); // Necessary to allow dropping
+                e.dataTransfer.dropEffect = 'move';
                 const targetItem = e.target.closest('.client-item');
                 if (targetItem && targetItem.dataset.clientId !== draggedClientId) {
                     // This is where you could add a visual indicator if desired
