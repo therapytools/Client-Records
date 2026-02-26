@@ -47,51 +47,52 @@ jobs:
           echo "  \"pub_date\": \"$PUB_DATE\"," >> latest.json
           echo "  \"platforms\": {" >> latest.json
           
-          # Process assets
-          ASSETS=$(echo "$RELEASE_DATA" | jq -c '.assets[]')
+          # Process updater bundles by using .sig assets and mapping to bundle asset names.
+          ASSETS_JSON=$(echo "$RELEASE_DATA" | jq -c '.assets')
+          SIG_NAMES=$(echo "$ASSETS_JSON" | jq -r '.[] | .name | select(endswith(".sig"))')
           FIRST=true
-          
-          for ASSET in $ASSETS; do
-            NAME=$(echo "$ASSET" | jq -r .name)
-            URL=$(echo "$ASSET" | jq -r .browser_download_url)
-            
-            # Only process .tar.gz and .zip files (the update bundles)
-            if [[ "$NAME" == *".tar.gz" ]] || [[ "$NAME" == *".zip" ]]; then
-              # Determine platform
-              PLATFORM=""
-              if [[ "$NAME" == *"darwin"* ]] || [[ "$NAME" == *"macos"* ]]; then
-                if [[ "$NAME" == *"aarch64"* ]]; then
-                  PLATFORM="darwin-aarch64"
-                elif [[ "$NAME" == *"x86_64"* ]]; then
-                  PLATFORM="darwin-x86_64"
-                else
-                  PLATFORM="darwin-universal"
-                fi
-              elif [[ "$NAME" == *"windows"* ]] || [[ "$NAME" == *".zip" ]]; then
-                PLATFORM="windows-x86_64"
-              elif [[ "$NAME" == *"linux"* ]] || [[ "$NAME" == *"ubuntu"* ]]; then
-                PLATFORM="linux-x86_64"
-              fi
-              
-              if [ -n "$PLATFORM" ]; then
-                # Get the signature file content
-                SIG_URL="${URL}.sig"
-                SIGNATURE=$(curl -sL "$SIG_URL")
-                
-                if [ -n "$SIGNATURE" ]; then
-                  if [ "$FIRST" = true ]; then
-                    FIRST=false
-                  else
-                    echo "    ," >> latest.json
-                  fi
-                  
-                  echo "    \"$PLATFORM\": {" >> latest.json
-                  echo "      \"signature\": \"$SIGNATURE\"," >> latest.json
-                  echo "      \"url\": \"$URL\"" >> latest.json
-                  echo "    }" >> latest.json
-                fi
-              fi
+
+          for SIG_NAME in $SIG_NAMES; do
+            BUNDLE_NAME="${SIG_NAME%.sig}"
+            BUNDLE_URL=$(echo "$ASSETS_JSON" | jq -r --arg n "$BUNDLE_NAME" '.[] | select(.name == $n) | .browser_download_url' | head -n 1)
+            SIG_URL=$(echo "$ASSETS_JSON" | jq -r --arg n "$SIG_NAME" '.[] | select(.name == $n) | .browser_download_url' | head -n 1)
+
+            if [ -z "$BUNDLE_URL" ] || [ -z "$SIG_URL" ]; then
+              continue
             fi
+
+            PLATFORM=""
+            if [[ "$BUNDLE_NAME" == *"universal.app.tar.gz"* ]]; then
+              PLATFORM="darwin-universal"
+            elif [[ "$BUNDLE_NAME" == *"aarch64.app.tar.gz"* ]] || [[ "$BUNDLE_NAME" == *"arm64.app.tar.gz"* ]]; then
+              PLATFORM="darwin-aarch64"
+            elif [[ "$BUNDLE_NAME" == *"x86_64.app.tar.gz"* ]] || [[ "$BUNDLE_NAME" == *"x64.app.tar.gz"* ]]; then
+              PLATFORM="darwin-x86_64"
+            elif [[ "$BUNDLE_NAME" == *".nsis.zip"* ]] || [[ "$BUNDLE_NAME" == *"windows"* ]]; then
+              PLATFORM="windows-x86_64"
+            elif [[ "$BUNDLE_NAME" == *".AppImage.tar.gz"* ]] || [[ "$BUNDLE_NAME" == *"linux"* ]]; then
+              PLATFORM="linux-x86_64"
+            fi
+
+            if [ -z "$PLATFORM" ]; then
+              continue
+            fi
+
+            SIGNATURE=$(curl -fsSL "$SIG_URL" | tr -d '\n')
+            if [ -z "$SIGNATURE" ]; then
+              continue
+            fi
+
+            if [ "$FIRST" = true ]; then
+              FIRST=false
+            else
+              echo "    ," >> latest.json
+            fi
+
+            echo "    \"$PLATFORM\": {" >> latest.json
+            echo "      \"signature\": \"$SIGNATURE\"," >> latest.json
+            echo "      \"url\": \"$BUNDLE_URL\"" >> latest.json
+            echo "    }" >> latest.json
           done
           
           echo "  }" >> latest.json
