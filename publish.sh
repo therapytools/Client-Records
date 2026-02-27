@@ -76,7 +76,7 @@ DMG="Client Records_${VERSION}_aarch64.dmg"
 # --- Create updater bundle ---
 echo "==> Creating updater tar.gz..."
 cd "$BUNDLE_DIR"
-tar czf "$TARGZ" "$APP_NAME"
+COPYFILE_DISABLE=1 tar czf "$TARGZ" "$APP_NAME"
 
 # --- Sign ---
 echo "==> Signing bundle..."

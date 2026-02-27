@@ -98,7 +98,7 @@
         }
 
         .header {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            background: var(--panel-header-bg);
             color: var(--text-color-inverted);
             padding: 12px 20px;
             display: flex;
@@ -106,6 +106,19 @@
             align-items: center;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             flex-shrink: 0;
+        }
+
+        [data-theme="dark"] .header {
+            background: var(--panel-header-bg);
+            color: var(--text-color-inverted);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .header {
+                background: var(--panel-header-bg);
+                color: var(--text-color-inverted);
+            }
+        }
         }
         
         .header h1 {
@@ -3027,13 +3040,19 @@
                 if (!Array.isArray(bank) || bank.length === 0) return [];
 
                 const normalizedCorpus = normalizeInterventionText(corpusText);
-                const aiLines = (aiInterventionsText || '')
-                    .split(/\n+/)
-                    .map(line => normalizeInterventionText(line.replace(/^•\s*/, '')))
-                    .filter(Boolean);
+                let aiLines = [];
+                if (typeof aiInterventionsText === 'string') {
+                    aiLines = aiInterventionsText.split(/\n+/)
+                        .map(line => normalizeInterventionText(line.replace(/^•\s*/, '')))
+                        .filter(Boolean);
+                } else if (Array.isArray(aiInterventionsText)) {
+                    aiLines = aiInterventionsText.map(line => normalizeInterventionText(String(line).replace(/^•\s*/, ''))).filter(Boolean);
+                } else if (aiInterventionsText && typeof aiInterventionsText === 'object') {
+                    aiLines = [normalizeInterventionText(JSON.stringify(aiInterventionsText))];
+                }
 
+                // Only select interventions that are present in the bank (including user-added)
                 const selected = new Set();
-
                 const bankMeta = bank
                     .filter(Boolean)
                     .map(item => {
@@ -3075,6 +3094,7 @@
                     }
                 });
 
+                // Filter strictly: only return interventions that are in the bank
                 return bank.filter(item => selected.has(item));
             };
 
