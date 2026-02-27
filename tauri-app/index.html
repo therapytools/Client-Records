@@ -311,7 +311,6 @@
             position: relative;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
             user-select: none;
-            touch-action: none;
         }
         .client-item:hover {
             transform: translateX(5px);
@@ -337,6 +336,25 @@
         .client-item.drag-over-below {
             border-bottom: 3px solid var(--accent-color, #007aff);
             margin-bottom: 5px;
+        }
+        .drag-ghost {
+            position: fixed;
+            pointer-events: none;
+            z-index: 10000;
+            opacity: 0.7;
+            transform: scale(0.95);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+            border-radius: 6px;
+            transition: none;
+        }
+        body.dragging-active {
+            user-select: none;
+            -webkit-user-select: none;
+            cursor: grabbing !important;
+        }
+        body.dragging-active * {
+            user-select: none !important;
+            -webkit-user-select: none !important;
         }
         
         .action-buttons {
@@ -1301,6 +1319,18 @@
     </style>
 </head>
 <body data-theme="light">
+    <!-- Rename Modal -->
+    <div id="renameModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3 id="renameModalTitle" style="margin-bottom: 16px; color: var(--text-color-primary);">Rename</h3>
+            <input type="text" id="renameModalInput" style="width: 100%; padding: 10px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--input-bg); color: var(--input-text); font-size: 14px; margin-bottom: 16px;">
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                <button id="renameModalCancel" class="btn" style="padding: 8px 16px; background: var(--panel-bg); color: var(--text-color-primary); border: 1px solid var(--input-border);">Cancel</button>
+                <button id="renameModalConfirm" class="btn" style="padding: 8px 16px;">Save</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Login Overlay -->
     <div id="loginOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-main); z-index: 9999; overflow-y: auto; display: flex; text-align: center; justify-content: center; align-items: flex-start; padding: 20px;">
         <div style="background: var(--panel-bg); padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); text-align: center; width: 400px; margin: auto;">
@@ -1667,7 +1697,7 @@
 
     <div class="container" id="appContainer" style="display: none;">
         <div class="header">
-            <h1>Client Data Organizer <span style="font-size: 0.8rem; font-weight: normal; vertical-align: middle;">v1.0.7</span></h1>
+            <h1>Client Data Organizer <span style="font-size: 0.8rem; font-weight: normal; vertical-align: middle;">v1.0.8</span></h1>
             <div id="autoSaveIndicator" class="autosave-indicator" style="opacity: 0;">
                 <span id="saveStatus"></span>
             </div>
@@ -4433,14 +4463,22 @@ Requirements:
                 }
 
                 const proposedName = noteNameInput.value.trim();
-                const newName = proposedName || prompt('Rename note:', note.name);
-                if (!newName || !newName.trim()) return;
-
-                note.name = newName.trim();
-                note.updatedAt = new Date().toISOString();
-                noteNameInput.value = note.name;
-                markDirty();
-                fullRender();
+                if (proposedName && proposedName !== note.name) {
+                    note.name = proposedName;
+                    note.updatedAt = new Date().toISOString();
+                    noteNameInput.value = note.name;
+                    markDirty();
+                    fullRender();
+                    return;
+                }
+                showRenameModal('Rename note', note.name).then(newName => {
+                    if (!newName || !newName.trim()) return;
+                    note.name = newName.trim();
+                    note.updatedAt = new Date().toISOString();
+                    noteNameInput.value = note.name;
+                    markDirty();
+                    fullRender();
+                });
             };
             
             clientListEl.addEventListener('click', (e) => {
@@ -4449,7 +4487,7 @@ Requirements:
 
                 const clientId = clientItem.dataset.clientId;
 
-                if (e.target.classList.contains('delete-btn')) {
+                if (e.target.closest('.delete-btn')) {
                      const client = findClient(clientId);
                      if (confirm(`Are you sure you want to delete ${client.name}?`)) {
                         const clientIndex = data.clients.findIndex(c => c.id === clientId);
@@ -4468,7 +4506,7 @@ Requirements:
                         markDirty();
                         fullRender();
                      }
-                } else if (e.target.classList.contains('archive-btn')) {
+                } else if (e.target.closest('.archive-btn')) {
                     const clientIndex = data.clients.findIndex(c => c.id === clientId);
                     if (clientIndex === -1) return;
                     const [client] = data.clients.splice(clientIndex, 1);
@@ -4482,37 +4520,92 @@ Requirements:
                     }
                     markDirty();
                     fullRender();
-                } else if (e.target.classList.contains('edit-btn')) {
+                } else if (e.target.closest('.edit-btn')) {
                     const client = findClient(clientId);
                     if (!client) return;
-                    const newName = prompt(`Enter new name for ${client.name}:`, client.name);
-                    if (newName && newName.trim() && newName.trim() !== client.name) {
-                        client.name = newName.trim();
-                        markDirty();
-                        fullRender();
-                    }
+                    showRenameModal(`Rename client`, client.name).then(newName => {
+                        if (newName && newName.trim() && newName.trim() !== client.name) {
+                            client.name = newName.trim();
+                            markDirty();
+                            fullRender();
+                        }
+                    });
                 } else {
                     selectClient(clientId);
                 }
             });
 
-            // --- Drag and Drop Client Reordering (pointer events) ---
-            let dragState = null; // { clientId, startY, element, threshold: false }
+            // --- Rename Modal Helper ---
+            function showRenameModal(title, currentValue) {
+                return new Promise((resolve) => {
+                    const modal = document.getElementById('renameModal');
+                    const input = document.getElementById('renameModalInput');
+                    const titleEl = document.getElementById('renameModalTitle');
+                    const confirmBtn = document.getElementById('renameModalConfirm');
+                    const cancelBtn = document.getElementById('renameModalCancel');
+                    
+                    titleEl.textContent = title;
+                    input.value = currentValue;
+                    modal.classList.remove('hidden');
+                    setTimeout(() => { input.focus(); input.select(); }, 50);
+                    
+                    function cleanup() {
+                        modal.classList.add('hidden');
+                        confirmBtn.removeEventListener('click', onConfirm);
+                        cancelBtn.removeEventListener('click', onCancel);
+                        input.removeEventListener('keydown', onKeydown);
+                    }
+                    function onConfirm() { cleanup(); resolve(input.value); }
+                    function onCancel() { cleanup(); resolve(null); }
+                    function onKeydown(e) {
+                        if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
+                        if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+                    }
+                    confirmBtn.addEventListener('click', onConfirm);
+                    cancelBtn.addEventListener('click', onCancel);
+                    input.addEventListener('keydown', onKeydown);
+                });
+            }
 
-            clientListEl.addEventListener('pointerdown', (e) => {
-                const clientItem = e.target.closest('.client-item');
-                // Don't initiate drag on action buttons
-                if (!clientItem || e.target.closest('.action-buttons')) return;
-                dragState = {
-                    clientId: clientItem.dataset.clientId,
-                    startY: e.clientY,
-                    element: clientItem,
-                    threshold: false
-                };
-                clientItem.setPointerCapture(e.pointerId);
-            });
+            // --- Drag and Drop Client Reordering (mouse events) ---
+            let dragState = null; // { clientId, startY, element, ghost: null, threshold: false }
 
-            clientListEl.addEventListener('pointermove', (e) => {
+            function cleanupDrag() {
+                if (dragState) {
+                    dragState.element.classList.remove('dragging');
+                    if (dragState.ghost) {
+                        dragState.ghost.remove();
+                    }
+                }
+                document.body.style.cursor = '';
+                document.body.classList.remove('dragging-active');
+                clientListEl.querySelectorAll('.client-item').forEach(item => {
+                    item.classList.remove('drag-over-above', 'drag-over-below');
+                });
+                dragState = null;
+                document.removeEventListener('mousemove', onDragMouseMove);
+                document.removeEventListener('mouseup', onDragMouseUp);
+            }
+
+            function createDragGhost(sourceEl, x, y) {
+                const ghost = sourceEl.cloneNode(true);
+                const rect = sourceEl.getBoundingClientRect();
+                ghost.className = 'client-item drag-ghost';
+                ghost.style.width = rect.width + 'px';
+                ghost.style.left = (x - rect.width / 2) + 'px';
+                ghost.style.top = (y - rect.height / 2) + 'px';
+                ghost.style.background = getComputedStyle(sourceEl).background;
+                ghost.style.color = getComputedStyle(sourceEl).color;
+                ghost.style.padding = getComputedStyle(sourceEl).padding;
+                ghost.style.borderLeft = getComputedStyle(sourceEl).borderLeft;
+                // Hide action buttons on ghost
+                const btns = ghost.querySelector('.action-buttons');
+                if (btns) btns.style.display = 'none';
+                document.body.appendChild(ghost);
+                return ghost;
+            }
+
+            function onDragMouseMove(e) {
                 if (!dragState) return;
                 const dy = Math.abs(e.clientY - dragState.startY);
                 // Require 5px of movement before starting drag (avoids interfering with clicks)
@@ -4520,8 +4613,18 @@ Requirements:
                     if (dy < 5) return;
                     dragState.threshold = true;
                     dragState.element.classList.add('dragging');
+                    dragState.ghost = createDragGhost(dragState.element, e.clientX, e.clientY);
+                    document.body.style.cursor = 'grabbing';
+                    document.body.classList.add('dragging-active');
                 }
-                // Find the item under the pointer
+                e.preventDefault(); // prevent text selection while dragging
+                // Move ghost
+                if (dragState.ghost) {
+                    const ghostRect = dragState.ghost.getBoundingClientRect();
+                    dragState.ghost.style.left = (e.clientX - ghostRect.width / 2) + 'px';
+                    dragState.ghost.style.top = (e.clientY - ghostRect.height / 2) + 'px';
+                }
+                // Find the item under the cursor
                 const items = clientListEl.querySelectorAll('.client-item');
                 items.forEach(item => {
                     item.classList.remove('drag-over-above', 'drag-over-below');
@@ -4539,13 +4642,12 @@ Requirements:
                         break;
                     }
                 }
-            });
+            }
 
-            clientListEl.addEventListener('pointerup', (e) => {
+            function onDragMouseUp(e) {
                 if (!dragState) return;
                 const { clientId: sourceId, threshold } = dragState;
                 // Clean up visual state
-                dragState.element.classList.remove('dragging');
                 const items = clientListEl.querySelectorAll('.client-item');
                 let targetId = null;
                 let insertAfter = false;
@@ -4557,9 +4659,8 @@ Requirements:
                         targetId = item.dataset.clientId;
                         insertAfter = true;
                     }
-                    item.classList.remove('drag-over-above', 'drag-over-below');
                 });
-                dragState = null;
+                cleanupDrag();
 
                 if (!threshold || !targetId || targetId === sourceId) return;
 
@@ -4575,15 +4676,21 @@ Requirements:
 
                 markDirty();
                 renderClients();
-            });
+            }
 
-            clientListEl.addEventListener('pointercancel', () => {
-                if (!dragState) return;
-                dragState.element.classList.remove('dragging');
-                clientListEl.querySelectorAll('.client-item').forEach(item => {
-                    item.classList.remove('drag-over-above', 'drag-over-below');
-                });
-                dragState = null;
+            clientListEl.addEventListener('mousedown', (e) => {
+                const clientItem = e.target.closest('.client-item');
+                // Don't initiate drag on action buttons
+                if (!clientItem || e.target.closest('.action-buttons')) return;
+                dragState = {
+                    clientId: clientItem.dataset.clientId,
+                    startY: e.clientY,
+                    element: clientItem,
+                    threshold: false,
+                    ghost: null
+                };
+                document.addEventListener('mousemove', onDragMouseMove);
+                document.addEventListener('mouseup', onDragMouseUp);
             });
 
             appointmentListEl.addEventListener('click', (e) => {
@@ -4603,7 +4710,7 @@ Requirements:
                     const client = findClient(selectedClientId);
                     if (!client) return;
 
-                    if (e.target.classList.contains('delete-btn')) {
+                    if (e.target.closest('.delete-btn')) {
                         const intakeIndex = (client.intakeSessions || []).findIndex(i => i.id === intakeId);
                         if (intakeIndex > -1 && confirm('Delete this intake session?')) {
                             client.intakeSessions.splice(intakeIndex, 1);
@@ -4623,7 +4730,7 @@ Requirements:
                     const client = findClient(selectedClientId);
                     if (!client) return;
 
-                    if (e.target.classList.contains('delete-btn')) {
+                    if (e.target.closest('.delete-btn')) {
                         const noteIndex = (client.notes || []).findIndex(n => n.id === noteId);
                         if (noteIndex > -1 && confirm('Delete this note?')) {
                             const [removedNote] = client.notes.splice(noteIndex, 1);
@@ -4635,17 +4742,18 @@ Requirements:
                         return;
                     }
 
-                    if (e.target.classList.contains('edit-btn')) {
+                    if (e.target.closest('.edit-btn')) {
                         const note = findNote(client, noteId);
                         if (!note) return;
-                        const newName = prompt('Rename note:', note.name);
-                        if (newName && newName.trim() && newName.trim() !== note.name) {
-                            note.name = newName.trim();
-                            note.updatedAt = new Date().toISOString();
-                            noteNameInput.value = note.name;
-                            markDirty();
-                            fullRender();
-                        }
+                        showRenameModal('Rename note', note.name).then(newName => {
+                            if (newName && newName.trim() && newName.trim() !== note.name) {
+                                note.name = newName.trim();
+                                note.updatedAt = new Date().toISOString();
+                                noteNameInput.value = note.name;
+                                markDirty();
+                                fullRender();
+                            }
+                        });
                         return;
                     }
 
@@ -4657,7 +4765,7 @@ Requirements:
 
                  const appointmentId = appointmentItem.dataset.appointmentId;
                  
-                 if (e.target.classList.contains('delete-btn')) {
+                 if (e.target.closest('.delete-btn')) {
                     const client = findClient(selectedClientId);
                     if (!client) return;
                     const apptIndex = client.appointments.findIndex(a => a.id === appointmentId);
