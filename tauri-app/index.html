@@ -1765,7 +1765,7 @@
 
     <div class="container" id="appContainer" style="display: none;">
         <div class="header">
-            <h1>Client Data Organizer <span style="font-size: 0.8rem; font-weight: normal; vertical-align: middle;">v1.1.0</span></h1>
+            <h1>Client Data Organizer <span style="font-size: 0.8rem; font-weight: normal; vertical-align: middle;">v1.0.11</span></h1>
             <div id="autoSaveIndicator" class="autosave-indicator" style="opacity: 0;">
                 <span id="saveStatus"></span>
             </div>
@@ -5363,9 +5363,9 @@ Analyze the "Session Information" text provided by the user. Categorize every pi
     - **PROHIBITED:** Do NOT invent, infer, or output interventions that are not explicitly in the Intervention Bank list.
     - If none apply, return: "No interventions selected from the bank."
 
-- **Audit-Proofing Field Mapping (REQUIRED WHEN PROVIDED):**
-    - "Symptom Pattern / Severity Context" and "Functional Impact" MUST be integrated into **Subjective (S)**.
-    - "Progress / Response to Treatment" and "Medical Necessity Rationale" MUST be integrated into **Assessment (A)**.
+        - **Audit-Proofing Field Mapping (REQUIRED WHEN PROVIDED):**
+    - "Symptom Pattern / Severity Context" MUST be integrated into **Subjective (S)**.
+    - "Functional Impact", "Progress / Response to Treatment", and "Medical Necessity Rationale" MUST be integrated into **Assessment (A)**.
     - Preserve these inputs faithfully and do not omit them when present.
     - **CRITICAL:** Do NOT include the field label names (e.g., "Symptom Pattern / Severity Context:", "Functional Impact:", "Progress / Response to Treatment:", "Medical Necessity Rationale:") anywhere in the generated output. Weave the content naturally into the prose of the appropriate section without any label prefix or heading.
 
@@ -5453,10 +5453,12 @@ Analyze the "Session Information" text provided by the user. Categorize every pi
                      }
 
                     if (key === 's') {
+                        // Symptoms belong in Subjective
                         appointment.soap[key] = appendAuditFieldToSection(appointment.soap[key], 'Symptom Pattern / Severity Context', auditProofing.symptoms);
-                        appointment.soap[key] = appendAuditFieldToSection(appointment.soap[key], 'Functional Impact', auditProofing.functionalImpact);
                     }
                     if (key === 'a') {
+                        // Functional Impact, Progress, and Medical Necessity belong in Assessment
+                        appointment.soap[key] = appendAuditFieldToSection(appointment.soap[key], 'Functional Impact', auditProofing.functionalImpact);
                         appointment.soap[key] = appendAuditFieldToSection(appointment.soap[key], 'Progress / Response to Treatment', auditProofing.progressResponse);
                         appointment.soap[key] = appendAuditFieldToSection(appointment.soap[key], 'Medical Necessity Rationale', auditProofing.medicalNecessity);
                     }
@@ -5517,15 +5519,11 @@ Analyze the "Session Information" text provided by the user. Categorize every pi
                 const appointmentSessionInfo = appointment.sessionInfo || '';
                 const instructionsContext = getInstructionsContext(client, appointment);
                 const auditProofing = getAuditProofingData(appointment);
-                const auditProofingLines = [
-                    auditProofing.symptoms ? `  - Symptom Pattern / Severity Context: ${auditProofing.symptoms}` : null,
-                    auditProofing.functionalImpact ? `  - Functional Impact: ${auditProofing.functionalImpact}` : null,
-                    auditProofing.progressResponse ? `  - Progress / Response to Treatment: ${auditProofing.progressResponse}` : null,
-                    auditProofing.medicalNecessity ? `  - Medical Necessity Rationale: ${auditProofing.medicalNecessity}` : null
-                ].filter(Boolean);
-                const auditProofingContext = auditProofingLines.length > 0
-                    ? `\n- **Audit-Proofing:**\n${auditProofingLines.join('\n')}`
-                    : '';
+                // Split audit-proofing into Subjective vs Assessment contexts
+                const auditProofingSubjective = auditProofing.symptoms ? `\n- **Audit (Subjective):**\n${auditProofing.symptoms}` : '';
+                const auditAssessmentParts = [auditProofing.functionalImpact, auditProofing.progressResponse, auditProofing.medicalNecessity].filter(Boolean).join('\n\n');
+                const auditProofingAssessment = auditAssessmentParts ? `\n- **Audit (Assessment):**\n${auditAssessmentParts}` : '';
+                const auditProofingContext = `${auditProofingSubjective}${auditProofingAssessment}`;
 
                 const userPrompt = `- **Session Information (This Session):**\n${appointmentSessionInfo}${treatmentGoalsContext}${selectedObjectivesContext}${interventionContext}${auditProofingContext}${modalityLensContext}${instructionsContext}`;
 
@@ -5598,15 +5596,11 @@ Analyze the "Session Information" text provided by the user. Categorize every pi
                 const appointmentSessionInfo = appointment.sessionInfo || '';
                 const instructionsContext = getInstructionsContext(client, appointment);
                 const auditProofing = getAuditProofingData(appointment);
-                const auditProofingLines = [
-                    auditProofing.symptoms ? `  - Symptom Pattern / Severity Context: ${auditProofing.symptoms}` : null,
-                    auditProofing.functionalImpact ? `  - Functional Impact: ${auditProofing.functionalImpact}` : null,
-                    auditProofing.progressResponse ? `  - Progress / Response to Treatment: ${auditProofing.progressResponse}` : null,
-                    auditProofing.medicalNecessity ? `  - Medical Necessity Rationale: ${auditProofing.medicalNecessity}` : null
-                ].filter(Boolean);
-                const auditProofingContext = auditProofingLines.length > 0
-                    ? `\n- **Audit-Proofing:**\n${auditProofingLines.join('\n')}`
-                    : '';
+                // Split audit-proofing into Subjective vs Assessment contexts
+                const auditProofingSubjective = auditProofing.symptoms ? `\n- **Audit (Subjective):**\n${auditProofing.symptoms}` : '';
+                const auditAssessmentParts = [auditProofing.functionalImpact, auditProofing.progressResponse, auditProofing.medicalNecessity].filter(Boolean).join('\n\n');
+                const auditProofingAssessment = auditAssessmentParts ? `\n- **Audit (Assessment):**\n${auditAssessmentParts}` : '';
+                const auditProofingContext = `${auditProofingSubjective}${auditProofingAssessment}`;
 
                 const userPrompt = `
 - **Session Information (This Session):**
