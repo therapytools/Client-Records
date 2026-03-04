@@ -4153,11 +4153,11 @@ Requirements:
                         ${(soapData.p_suggestion || []).map((s, i) => renderSuggestionBox('p', s, i)).join('')}
                     </div>
                     <div class="soap-section">
-                        <div class="soap-header"><span>Interventions</span><div><button id="selectInterventionsBtn" class="copy-btn" style="margin-right:6px;">Select from Bank</button><button class="copy-btn" data-target="interventions">Copy</button></div></div>
+                        <div class="soap-header"><span>Interventions</span><div><button id="selectInterventionsBtn" class="copy-btn" style="margin-right:6px;">Bank</button><button class="copy-btn" data-target="interventions">Copy</button></div></div>
                         <textarea id="interventions" class="soap-textarea" readonly autocorrect="off" autocapitalize="off" spellcheck="true">${interventions}</textarea>
                     </div>
                     <div class="soap-section">
-                        <div class="soap-header"><span>Audit Check</span><button id="runSoapAuditBtn" class="copy-btn">Run Audit Check</button></div>
+                        <div class="soap-header"><span>Audit Check</span><button id="runSoapAuditBtn" class="copy-btn">Audit</button></div>
                         ${renderAuditResults(auditResult)}
                     </div>`;
                 
