@@ -930,7 +930,20 @@
             color: var(--text-color-secondary); text-align: center;
             margin-top: 50px; font-style: italic;
         }
-        .autosave-indicator { color: var(--text-color-inverted); font-size: 12px; margin-left: auto; }
+        .autosave-indicator {
+            position: fixed;
+            right: 14px;
+            bottom: 12px;
+            z-index: 2100;
+            color: #f8fafc;
+            font-size: 12px;
+            margin-left: 0;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.88);
+            box-shadow: 0 8px 20px rgba(2, 6, 23, 0.35);
+            pointer-events: none;
+        }
         
         .deleted-list { max-height: 100px; overflow-y: auto; }
         .deleted-item { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; padding: 2px 0; color: var(--deleted-item-text); }
