@@ -141,6 +141,49 @@
         .header h1 {
             font-size: 1.5rem;
             margin-right: auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .version-badge {
+            font-size: 0.8rem;
+            font-weight: normal;
+            vertical-align: middle;
+        }
+
+        .column-visibility-controls {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 6px;
+        }
+
+        .column-visibility-pill {
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 999px;
+            color: #ffffff;
+            font-size: 0.74rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            padding: 4px 10px;
+            cursor: pointer;
+            transition: filter 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+            box-shadow: 0 5px 14px rgba(0, 0, 0, 0.25);
+        }
+
+        .column-visibility-pill:hover {
+            filter: brightness(1.07);
+            transform: translateY(-1px);
+        }
+
+        .column-visibility-pill.is-shown {
+            background: linear-gradient(135deg, #1f9d55 0%, #15803d 100%);
+        }
+
+        .column-visibility-pill.is-hidden {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
         }
 
         .header-menu {
@@ -1010,49 +1053,6 @@
             overflow: hidden;
         }
 
-        .resizer-toggle-group {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            display: flex;
-            flex-direction: column;
-            gap: 32px;
-            z-index: 20;
-        }
-
-        .resizer-toggle-btn {
-            min-width: 126px;
-            height: 26px;
-            border: 1px solid color-mix(in srgb, var(--panel-border) 65%, transparent);
-            border-radius: 999px;
-            background: linear-gradient(135deg, color-mix(in srgb, #0f766e 70%, var(--bg-container) 30%) 0%, color-mix(in srgb, #115e59 70%, var(--bg-container) 30%) 100%);
-            color: #f8fafc;
-            font-size: 10px;
-            font-weight: 600;
-            letter-spacing: 0.02em;
-            line-height: 1;
-            padding: 0 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            white-space: nowrap;
-            transform: rotate(-90deg);
-            transform-origin: center;
-            box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
-            transition: transform 0.16s ease, filter 0.16s ease, box-shadow 0.16s ease;
-        }
-
-        .resizer-toggle-btn:hover {
-            filter: brightness(1.05);
-            box-shadow: 0 10px 22px rgba(0, 0, 0, 0.26);
-        }
-
-        .resizer-toggle-btn[data-action="expand"] {
-            background: linear-gradient(135deg, color-mix(in srgb, #2563eb 76%, var(--bg-container) 24%) 0%, color-mix(in srgb, #1d4ed8 76%, var(--bg-container) 24%) 100%);
-        }
-        
         .hidden {
             display: none !important;
         }
@@ -1837,7 +1837,16 @@
 
     <div class="container" id="appContainer" style="display: none;">
         <div class="header">
-            <h1>Client Data Organizer <span style="font-size: 0.8rem; font-weight: normal; vertical-align: middle;">v1.0.19</span></h1>
+            <h1>
+                Client Data Organizer
+                <span class="version-badge">v1.0.19</span>
+                <span class="column-visibility-controls" aria-label="Column visibility controls">
+                    <button id="columnToggleClients" class="column-visibility-pill is-shown" type="button" title="Hide Clients">Clients</button>
+                    <button id="columnToggleAppointments" class="column-visibility-pill is-shown" type="button" title="Hide Appointments">Appointments</button>
+                    <button id="columnToggleNotes" class="column-visibility-pill is-shown" type="button" title="Hide Notes">Notes</button>
+                    <button id="columnToggleSoap" class="column-visibility-pill is-shown" type="button" title="Hide SOAP">SOAP</button>
+                </span>
+            </h1>
             <div id="autoSaveIndicator" class="autosave-indicator" style="opacity: 0;">
                 <span id="saveStatus"></span>
             </div>
@@ -1898,12 +1907,7 @@
                 </div>
             </div>
 
-            <div class="resizer" id="resizer1">
-                <div class="resizer-toggle-group">
-                    <button class="resizer-toggle-btn" data-side="prev" title="Collapse Clients" aria-label="Collapse Clients">collapse clients</button>
-                    <button class="resizer-toggle-btn" data-side="next" title="Collapse Appointments" aria-label="Collapse Appointments">collapse appointments</button>
-                </div>
-            </div>
+            <div class="resizer" id="resizer1"></div>
 
             <!-- Appointments Panel -->
             <div class="panel appointments-panel" id="panelAppointments">
@@ -1965,12 +1969,7 @@
                 </div>
             </div>
 
-            <div class="resizer" id="resizer2">
-                <div class="resizer-toggle-group">
-                    <button class="resizer-toggle-btn" data-side="prev" title="Collapse Appointments" aria-label="Collapse Appointments">collapse appointments</button>
-                    <button class="resizer-toggle-btn" data-side="next" title="Collapse Notes" aria-label="Collapse Notes">collapse notes</button>
-                </div>
-            </div>
+            <div class="resizer" id="resizer2"></div>
 
             <!-- Session & Notes Panel -->
             <div class="panel session-panel" id="panelSession">
@@ -2029,12 +2028,7 @@
                  </div>
             </div>
 
-            <div class="resizer" id="resizer3">
-                <div class="resizer-toggle-group">
-                    <button class="resizer-toggle-btn" data-side="prev" title="Collapse Notes" aria-label="Collapse Notes">collapse notes</button>
-                    <button class="resizer-toggle-btn" data-side="next" title="Collapse SOAP" aria-label="Collapse SOAP">collapse soap</button>
-                </div>
-            </div>
+            <div class="resizer" id="resizer3"></div>
 
             <!-- SOAP Notes Panel -->
             <div class="panel soap-panel" id="panelSoap">
@@ -7803,7 +7797,6 @@ This error cannot be fixed within this application's code; it requires a configu
                 let containerSize = 0;
 
                 resizer.addEventListener('mousedown', function (e) {
-                    if (e.target.closest('.resizer-toggle-btn')) return;
                     e.preventDefault();
                     if (direction === 'x') {
                         x = e.clientX;
@@ -7868,10 +7861,11 @@ This error cannot be fixed within this application's code; it requires a configu
                 panelSoap: '30%'
             };
 
-            const RESIZER_PANEL_MAP = {
-                resizer1: { prev: 'panelClients', next: 'panelAppointments' },
-                resizer2: { prev: 'panelAppointments', next: 'panelSession' },
-                resizer3: { prev: 'panelSession', next: 'panelSoap' }
+            const COLUMN_TOGGLE_BUTTON_MAP = {
+                panelClients: 'columnToggleClients',
+                panelAppointments: 'columnToggleAppointments',
+                panelSession: 'columnToggleNotes',
+                panelSoap: 'columnToggleSoap'
             };
 
             const getPanelCurrentBasis = (panelId) => {
@@ -7916,41 +7910,26 @@ This error cannot be fixed within this application's code; it requires a configu
                     panelSoap: 'SOAP'
                 };
 
-                const applyButtonLabel = (button, panel) => {
-                    const columnName = columnDisplayNames[panel.id] || 'Column';
-                    const isCollapsed = panel.classList.contains('column-collapsed');
-                    const action = isCollapsed ? 'expand' : 'collapse';
-                    const label = `${action} ${columnName}`;
-                    button.textContent = label;
-                    button.dataset.action = action;
-                    button.title = `${action.charAt(0).toUpperCase()}${action.slice(1)} ${columnName}`;
-                    button.setAttribute('aria-label', button.title);
-                };
+                Object.entries(COLUMN_TOGGLE_BUTTON_MAP).forEach(([panelId, buttonId]) => {
+                    const panel = document.getElementById(panelId);
+                    const button = document.getElementById(buttonId);
+                    if (!panel || !button) return;
 
-                Object.entries(RESIZER_PANEL_MAP).forEach(([resizerId, map]) => {
-                    const resizer = document.getElementById(resizerId);
-                    if (!resizer) return;
-                    const prevPanel = document.getElementById(map.prev);
-                    const nextPanel = document.getElementById(map.next);
-                    const prevBtn = resizer.querySelector('.resizer-toggle-btn[data-side="prev"]');
-                    const nextBtn = resizer.querySelector('.resizer-toggle-btn[data-side="next"]');
-                    if (prevBtn && prevPanel) {
-                        applyButtonLabel(prevBtn, prevPanel);
-                    }
-                    if (nextBtn && nextPanel) {
-                        applyButtonLabel(nextBtn, nextPanel);
-                    }
+                    const columnName = columnDisplayNames[panelId] || 'Column';
+                    const isHidden = panel.classList.contains('column-collapsed');
+                    button.classList.toggle('is-hidden', isHidden);
+                    button.classList.toggle('is-shown', !isHidden);
+                    button.title = `${isHidden ? 'Show' : 'Hide'} ${columnName}`;
+                    button.setAttribute('aria-label', button.title);
                 });
             };
 
             const saveCollapsedColumns = () => {
                 const collapsed = {};
-                Object.values(RESIZER_PANEL_MAP).forEach(({ prev, next }) => {
-                    [prev, next].forEach(panelId => {
-                        const panel = document.getElementById(panelId);
-                        if (!panel) return;
-                        collapsed[panelId] = panel.classList.contains('column-collapsed');
-                    });
+                Object.keys(COLUMN_TOGGLE_BUTTON_MAP).forEach(panelId => {
+                    const panel = document.getElementById(panelId);
+                    if (!panel) return;
+                    collapsed[panelId] = panel.classList.contains('column-collapsed');
                 });
                 localStorage.setItem('collapsedColumns', JSON.stringify(collapsed));
             };
@@ -7963,22 +7942,18 @@ This error cannot be fixed within this application's code; it requires a configu
                     }
                 });
 
-                Object.entries(RESIZER_PANEL_MAP).forEach(([resizerId, map]) => {
-                    const resizer = document.getElementById(resizerId);
-                    if (!resizer) return;
-                    resizer.querySelectorAll('.resizer-toggle-btn').forEach(btn => {
-                        btn.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            const side = btn.dataset.side;
-                            const panelId = map[side];
-                            const panel = document.getElementById(panelId);
-                            if (!panel) return;
-                            const shouldCollapse = !panel.classList.contains('column-collapsed');
-                            setColumnCollapsed(panelId, shouldCollapse);
-                            refreshResizerToggleIcons();
-                            saveCollapsedColumns();
-                            saveColumnSizes();
-                        });
+                Object.entries(COLUMN_TOGGLE_BUTTON_MAP).forEach(([panelId, buttonId]) => {
+                    const button = document.getElementById(buttonId);
+                    const panel = document.getElementById(panelId);
+                    if (!button || !panel) return;
+
+                    button.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const shouldCollapse = !panel.classList.contains('column-collapsed');
+                        setColumnCollapsed(panelId, shouldCollapse);
+                        refreshResizerToggleIcons();
+                        saveCollapsedColumns();
+                        saveColumnSizes();
                     });
                 });
 
