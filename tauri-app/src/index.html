@@ -940,19 +940,24 @@
         }
 
         .resizer-toggle-btn {
-            width: 16px;
-            height: 16px;
+            width: 20px;
+            min-height: 86px;
             border: 1px solid var(--panel-border);
             border-radius: 4px;
             background: var(--bg-container);
             color: var(--text-color-primary);
-            font-size: 10px;
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
             line-height: 1;
-            padding: 0;
+            padding: 4px 2px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            text-transform: lowercase;
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
         }
 
@@ -1115,8 +1120,8 @@
 
             <div class="resizer" id="resizer1">
                 <div class="resizer-toggle-group">
-                    <button class="resizer-toggle-btn" data-side="prev" title="Collapse/Expand Clients" aria-label="Toggle clients column">◀</button>
-                    <button class="resizer-toggle-btn" data-side="next" title="Collapse/Expand Appointments" aria-label="Toggle appointments column">▶</button>
+                    <button class="resizer-toggle-btn" data-side="prev" title="Collapse Clients" aria-label="Collapse Clients">collapse clients</button>
+                    <button class="resizer-toggle-btn" data-side="next" title="Collapse Appointments" aria-label="Collapse Appointments">collapse appointments</button>
                 </div>
             </div>
 
@@ -1178,8 +1183,8 @@
 
             <div class="resizer" id="resizer2">
                 <div class="resizer-toggle-group">
-                    <button class="resizer-toggle-btn" data-side="prev" title="Collapse/Expand Appointments" aria-label="Toggle appointments column">◀</button>
-                    <button class="resizer-toggle-btn" data-side="next" title="Collapse/Expand Session" aria-label="Toggle session column">▶</button>
+                    <button class="resizer-toggle-btn" data-side="prev" title="Collapse Appointments" aria-label="Collapse Appointments">collapse appointments</button>
+                    <button class="resizer-toggle-btn" data-side="next" title="Collapse Notes" aria-label="Collapse Notes">collapse notes</button>
                 </div>
             </div>
 
@@ -1246,8 +1251,8 @@
 
             <div class="resizer" id="resizer3">
                 <div class="resizer-toggle-group">
-                    <button class="resizer-toggle-btn" data-side="prev" title="Collapse/Expand Session" aria-label="Toggle session column">◀</button>
-                    <button class="resizer-toggle-btn" data-side="next" title="Collapse/Expand SOAP" aria-label="Toggle SOAP column">▶</button>
+                    <button class="resizer-toggle-btn" data-side="prev" title="Collapse Notes" aria-label="Collapse Notes">collapse notes</button>
+                    <button class="resizer-toggle-btn" data-side="next" title="Collapse SOAP" aria-label="Collapse SOAP">collapse soap</button>
                 </div>
             </div>
 
@@ -6626,6 +6631,23 @@ This error cannot be fixed within this application's code; it requires a configu
             };
 
             const refreshResizerToggleIcons = () => {
+                const columnDisplayNames = {
+                    panelClients: 'Clients',
+                    panelAppointments: 'Appointments',
+                    panelSession: 'Notes',
+                    panelSoap: 'SOAP'
+                };
+
+                const applyButtonLabel = (button, panel) => {
+                    const columnName = columnDisplayNames[panel.id] || 'Column';
+                    const isCollapsed = panel.classList.contains('column-collapsed');
+                    const action = isCollapsed ? 'expand' : 'collapse';
+                    const label = `${action} ${columnName}`;
+                    button.textContent = label;
+                    button.title = `${action.charAt(0).toUpperCase()}${action.slice(1)} ${columnName}`;
+                    button.setAttribute('aria-label', button.title);
+                };
+
                 Object.entries(RESIZER_PANEL_MAP).forEach(([resizerId, map]) => {
                     const resizer = document.getElementById(resizerId);
                     if (!resizer) return;
@@ -6634,10 +6656,10 @@ This error cannot be fixed within this application's code; it requires a configu
                     const prevBtn = resizer.querySelector('.resizer-toggle-btn[data-side="prev"]');
                     const nextBtn = resizer.querySelector('.resizer-toggle-btn[data-side="next"]');
                     if (prevBtn && prevPanel) {
-                        prevBtn.textContent = prevPanel.classList.contains('column-collapsed') ? '▶' : '◀';
+                        applyButtonLabel(prevBtn, prevPanel);
                     }
                     if (nextBtn && nextPanel) {
-                        nextBtn.textContent = nextPanel.classList.contains('column-collapsed') ? '◀' : '▶';
+                        applyButtonLabel(nextBtn, nextPanel);
                     }
                 });
             };
