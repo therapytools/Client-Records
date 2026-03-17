@@ -1120,7 +1120,7 @@
         <div class="header">
             <h1>
                 Client Data Organizer
-                <span class="version-badge">v1.0.26</span>
+                <span class="version-badge">v1.0.27</span>
             </h1>
             <div class="header-column-controls" aria-label="Column visibility controls">
                 <button id="columnToggleClients" class="column-visibility-pill is-shown" type="button" title="Hide Clients">Clients</button>
@@ -2461,42 +2461,53 @@
                 .replace(/\s+/g, ' ')
                 .trim();
 
-            // Fuzzy/semantic-ish matching for interventions.
+            const stemInterventionToken = (token) => {
+                let t = String(token || '').toLowerCase().trim();
+                if (!t) return '';
+                if (t.length > 5 && t.endsWith('ing')) t = t.slice(0, -3);
+                else if (t.length > 4 && t.endsWith('ed')) t = t.slice(0, -2);
+                else if (t.length > 4 && t.endsWith('es')) t = t.slice(0, -2);
+                else if (t.length > 3 && t.endsWith('s')) t = t.slice(0, -1);
+                return t;
+            };
+
+            const tokenizeForInterventionMatch = (value) => normalizeForInterventionMatch(value)
+                .split(' ')
+                .map(stemInterventionToken)
+                .filter(Boolean);
+
+            const mergeInterventions = (existing, incoming) => {
+                const set = new Set([...(existing || []), ...(incoming || [])].filter(Boolean));
+                const bank = Array.isArray(data.interventionBank) ? data.interventionBank : [];
+                const orderedBankMatches = bank.filter(item => set.has(item));
+                const extras = [...set].filter(item => !bank.includes(item));
+                return [...orderedBankMatches, ...extras];
+            };
+
             const extractInterventionsFromObjective = (objectiveText) => {
-                const obj = normalizeForInterventionMatch(objectiveText || '');
-                if (!obj) return [];
+                const normalizedObjective = normalizeForInterventionMatch(objectiveText);
+                if (!normalizedObjective) return [];
 
-                const tokenize = (str) => (str || '').split(' ').filter(Boolean);
+                const objectiveTokens = tokenizeForInterventionMatch(objectiveText);
+                const objectiveTokenSet = new Set(objectiveTokens);
+                if (objectiveTokenSet.size === 0) return [];
 
-                const objTokens = tokenize(obj);
+                return (data.interventionBank || []).filter(item => {
+                    const normalizedItem = normalizeForInterventionMatch(item);
+                    if (!normalizedItem) return false;
 
-                const scoreForItem = (item) => {
-                    const normItem = normalizeForInterventionMatch(item);
-                    if (!normItem) return 0;
-                    const itemTokens = tokenize(normItem);
-                    if (itemTokens.length === 0) return 0;
+                    // Exact phrase match (current behavior) remains highest confidence.
+                    if (` ${normalizedObjective} `.includes(` ${normalizedItem} `)) return true;
 
-                    const setObj = new Set(objTokens);
-                    const setItem = new Set(itemTokens);
-                    let common = 0;
-                    itemTokens.forEach(t => { if (setObj.has(t)) common++; });
+                    // Fuzzy token/stem match allows imperfect wording, e.g. "re-author"
+                    // matching intervention bank item "re-authoring".
+                    const itemTokens = tokenizeForInterventionMatch(item);
+                    if (itemTokens.length === 0) return false;
+                    const overlap = itemTokens.filter(token => objectiveTokenSet.has(token)).length;
+                    const coverage = overlap / itemTokens.length;
 
-                    const unionSize = new Set([...objTokens, ...itemTokens]).size || 1;
-                    const jaccard = common / unionSize; // token overlap
-                    const containment = common / itemTokens.length; // fraction of item present in objective
-
-                    // Prefer containment (all item tokens present) but allow partial matches via jaccard.
-                    const score = Math.max(jaccard, containment);
-                    return score;
-                };
-
-                const candidates = (data.interventionBank || []).map(item => ({ item, score: scoreForItem(item) }))
-                    .filter(x => x.score > 0)
-                    .sort((a, b) => b.score - a.score);
-
-                // Threshold: return reasonable matches (loose threshold to allow fuzzy mapping)
-                const THRESH = 0.25;
-                return candidates.filter(c => c.score >= THRESH).map(c => ({ item: c.item, score: c.score }));
+                    return overlap > 0 && (coverage >= 1 || coverage >= 0.66);
+                });
             };
 
             const getInstructionsContext = (client, appointment) => {
@@ -3537,10 +3548,9 @@ Requirements:
                         <button class="suggestion-decline">Keep Original</button>
                         <button class="suggestion-accept-replace">Use Suggestion</button>
                     `;
-                } else { // It's a new suggestion (string or object with 'suggested')
+                } else { // It's a new suggestion (string)
                     suggestionTitle = 'Suggestion for Addition:';
-                    const suggestionText = (typeof suggestion === 'object' && suggestion.suggested) ? suggestion.suggested : suggestion;
-                    suggestionContent = `<strong>${suggestionTitle}</strong> ${suggestionText}`;
+                    suggestionContent = `<strong>${suggestionTitle}</strong> ${suggestion}`;
                     actionsHtml = `
                         <button class="suggestion-accept">Accept</button>
                         <button class="suggestion-decline">Decline</button>
@@ -4504,8 +4514,9 @@ Requirements:
                         if (key === 'o') {
                             const matchedInterventions = extractInterventionsFromObjective(textarea.value);
                             if (matchedInterventions.length > 0) {
-                                appointment.selectedInterventions = matchedInterventions.map(m => m.item);
-                                appointment.soap.interventions = matchedInterventions.map(m => `• ${m.item}`).join('\n');
+                                const mergedInterventions = mergeInterventions(appointment.selectedInterventions, matchedInterventions);
+                                appointment.selectedInterventions = mergedInterventions;
+                                appointment.soap.interventions = mergedInterventions.map(item => `• ${item}`).join('\n');
                                 const interventionsTextarea = document.getElementById('interventions');
                                 if (interventionsTextarea) interventionsTextarea.value = appointment.soap.interventions;
                             }
@@ -4686,15 +4697,15 @@ Requirements:
                             // User clicked "Use Suggestion"
                             textToAdd = suggestionData.suggested;
                         } else {
-                            // User clicked "Accept" for a new suggestion (string or object)
-                            textToAdd = (typeof suggestionData === 'string') ? suggestionData : (suggestionData.suggested || '');
+                            // User clicked "Accept" for a new suggestion (string)
+                            textToAdd = suggestionData;
                         }
                     } else { // Declined
                         if (isReplacement) {
                             // User clicked "Keep Original"
                             textToAdd = suggestionData.original;
                         }
-                        // If it's a new suggestion (string/object) and user clicks decline, textToAdd remains empty, which is correct.
+                        // If it's a new suggestion (string) and user clicks decline, textToAdd remains empty, which is correct.
                     }
                 }
 
@@ -4715,16 +4726,16 @@ Requirements:
                     // If this was an Objective suggestion that was accepted, extract matching
                     // interventions from the Objective text and populate the interventions field.
                     if (key === 'o' && isAccepted && !skipAppend) {
-                        let matchedInterventions = [];
-                        // Prefer suggestion-level metadata if available
-                        if (suggestionData && typeof suggestionData === 'object' && suggestionData.matchedIntervention) {
-                            matchedInterventions = [{ item: suggestionData.matchedIntervention, score: suggestionData.matchConfidence || 1 }];
-                        } else {
-                            matchedInterventions = extractInterventionsFromObjective(textarea.value);
-                        }
-                        appointment.selectedInterventions = matchedInterventions.map(m => m.item);
-                        appointment.soap.interventions = matchedInterventions.length > 0
-                            ? matchedInterventions.map(m => `• ${m.item}`).join('\n')
+                        const suggestionMatches = Array.isArray(appointment.soap.o_suggestion_intervention_matches)
+                            ? (appointment.soap.o_suggestion_intervention_matches[index] || [])
+                            : [];
+                        const matchedInterventions = suggestionMatches.length > 0
+                            ? suggestionMatches
+                            : extractInterventionsFromObjective(textToAdd);
+                        const mergedInterventions = mergeInterventions(appointment.selectedInterventions, matchedInterventions);
+                        appointment.selectedInterventions = mergedInterventions;
+                        appointment.soap.interventions = mergedInterventions.length > 0
+                            ? mergedInterventions.map(item => `• ${item}`).join('\n')
                             : appointment.soap.interventions || 'No interventions identified directly in Objective section.';
                         const interventionsTextarea = document.getElementById('interventions');
                         if (interventionsTextarea) interventionsTextarea.value = appointment.soap.interventions;
@@ -4734,6 +4745,9 @@ Requirements:
                 // Remove the suggestion that was just handled.
                 if (Array.isArray(appointment.soap[suggestionKey])) {
                     appointment.soap[suggestionKey].splice(index, 1);
+                }
+                if (type === 'o' && Array.isArray(appointment.soap.o_suggestion_intervention_matches)) {
+                    appointment.soap.o_suggestion_intervention_matches.splice(index, 1);
                 }
                 
                 markDirty();
@@ -4850,37 +4864,27 @@ Analyze the "Session Information" text provided by the user. Categorize every pi
                      }
                      
                      // Always store the full list of suggestions for user approval
-                     // For Objective suggestions, attach matchedIntervention metadata per suggestion
-                     if (key === 'o' && Array.isArray(suggestions) && suggestions.length > 0) {
-                         const normalized = suggestions.map(s => {
-                             let suggestionText = '';
-                             let out = s;
-                             if (typeof s === 'object' && s.suggested) {
-                                 suggestionText = s.suggested.replace(/^•\s*/, '').trim();
-                                 out = Object.assign({}, s);
-                             } else if (typeof s === 'string') {
-                                 suggestionText = s.replace(/^•\s*/, '').trim();
-                                 out = { suggested: s };
-                             }
-                             const matches = extractInterventionsFromObjective(suggestionText);
-                             if (matches && matches.length > 0) {
-                                 out.matchedIntervention = matches[0].item;
-                                 out.matchConfidence = matches[0].score;
-                             } else {
-                                 out.matchedIntervention = null;
-                                 out.matchConfidence = 0;
-                             }
-                             return out;
-                         });
-                         appointment.soap[suggestionKey] = normalized;
-                     } else {
-                         appointment.soap[suggestionKey] = suggestions;
-                     }
+                     appointment.soap[suggestionKey] = suggestions;
                  });
+
+                 const objectiveSuggestions = Array.isArray(appointment.soap.o_suggestion)
+                     ? appointment.soap.o_suggestion
+                     : [];
+                 appointment.soap.o_suggestion_intervention_matches = objectiveSuggestions.map(suggestion => {
+                     if (typeof suggestion === 'object' && suggestion && suggestion.suggested) {
+                         return extractInterventionsFromObjective(suggestion.suggested);
+                     }
+                     if (typeof suggestion === 'string') {
+                         return extractInterventionsFromObjective(suggestion);
+                     }
+                     return [];
+                 });
+
                  const matchedInterventions = extractInterventionsFromObjective(generatedObjectiveText);
-                 appointment.selectedInterventions = matchedInterventions.map(m => m.item);
-                 appointment.soap.interventions = matchedInterventions.length > 0
-                     ? matchedInterventions.map(m => `• ${m.item}`).join('\n')
+                 const mergedInterventions = mergeInterventions(appointment.selectedInterventions, matchedInterventions);
+                 appointment.selectedInterventions = mergedInterventions;
+                 appointment.soap.interventions = mergedInterventions.length > 0
+                     ? mergedInterventions.map(item => `• ${item}`).join('\n')
                      : 'No interventions identified directly in Objective section.';
              };
 
