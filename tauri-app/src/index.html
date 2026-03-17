@@ -818,7 +818,22 @@
             padding: 10px;
             margin-top: 8px;
             font-size: 14px;
+            position: relative;
         }
+        .suggestion-close {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            border: none;
+            background: transparent;
+            color: var(--suggestion-text);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1;
+            padding: 2px 4px;
+        }
+        .suggestion-close:hover { opacity: 0.8; }
         .suggestion-text {
             color: var(--suggestion-text);
             margin-bottom: 8px;
@@ -1105,7 +1120,7 @@
         <div class="header">
             <h1>
                 Client Data Organizer
-                <span class="version-badge">v1.0.24</span>
+                <span class="version-badge">v1.0.25</span>
             </h1>
             <div class="header-column-controls" aria-label="Column visibility controls">
                 <button id="columnToggleClients" class="column-visibility-pill is-shown" type="button" title="Hide Clients">Clients</button>
@@ -3505,6 +3520,7 @@ Requirements:
 
                 return `
                     <div class="suggestion-box" data-suggestion-type="${type}" data-suggestion-index="${index}">
+                        <button class="suggestion-close" title="Decline both" aria-label="Decline both original and suggestion">X</button>
                         <div class="suggestion-text">${suggestionContent}</div>
                         <div class="suggestion-actions">
                             ${actionsHtml}
@@ -4611,9 +4627,12 @@ Requirements:
                  if (e.target.classList.contains('suggestion-decline')) {
                     handleSuggestion(e.target, false);
                  }
+                      if (e.target.classList.contains('suggestion-close')) {
+                          handleSuggestion(e.target, false, true);
+                      }
             });
 
-            const handleSuggestion = (button, isAccepted) => {
+                const handleSuggestion = (button, isAccepted, skipAppend = false) => {
                 const suggestionBox = button.closest('.suggestion-box');
                 const type = suggestionBox.dataset.suggestionType;
                 const index = parseInt(suggestionBox.dataset.suggestionIndex, 10);
@@ -4633,20 +4652,22 @@ Requirements:
                 const isReplacement = typeof suggestionData === 'object' && suggestionData.original && suggestionData.suggested;
                 let textToAdd = '';
 
-                if (isAccepted) {
-                    if (isReplacement) {
-                        // User clicked "Use Suggestion"
-                        textToAdd = suggestionData.suggested;
-                    } else {
-                        // User clicked "Accept" for a new suggestion (string)
-                        textToAdd = suggestionData;
+                if (!skipAppend) {
+                    if (isAccepted) {
+                        if (isReplacement) {
+                            // User clicked "Use Suggestion"
+                            textToAdd = suggestionData.suggested;
+                        } else {
+                            // User clicked "Accept" for a new suggestion (string)
+                            textToAdd = suggestionData;
+                        }
+                    } else { // Declined
+                        if (isReplacement) {
+                            // User clicked "Keep Original"
+                            textToAdd = suggestionData.original;
+                        }
+                        // If it's a new suggestion (string) and user clicks decline, textToAdd remains empty, which is correct.
                     }
-                } else { // Declined
-                    if (isReplacement) {
-                        // User clicked "Keep Original"
-                        textToAdd = suggestionData.original;
-                    }
-                    // If it's a new suggestion (string) and user clicks decline, textToAdd remains empty, which is correct.
                 }
 
                 if (textToAdd) {
