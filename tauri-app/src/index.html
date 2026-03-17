@@ -4470,9 +4470,17 @@ Requirements:
                     } else {
                         const key = textarea.id.slice(-1).toLowerCase();
                         appointment.soap[key] = textarea.value;
-                        // NOTE: Do not auto-update interventions for manual Objective edits.
-                        // Interventions are updated when AI-generated objectives are produced
-                        // or when a suggestion is explicitly accepted (handled in handleSuggestion).
+                        // NEW: If the Objective text (manual or AI) directly names any intervention
+                        // from the intervention bank, add those to the interventions list.
+                        if (key === 'o') {
+                            const matchedInterventions = extractInterventionsFromObjective(textarea.value);
+                            if (matchedInterventions.length > 0) {
+                                appointment.selectedInterventions = matchedInterventions;
+                                appointment.soap.interventions = matchedInterventions.map(item => `• ${item}`).join('\n');
+                                const interventionsTextarea = document.getElementById('interventions');
+                                if (interventionsTextarea) interventionsTextarea.value = appointment.soap.interventions;
+                            }
+                        }
                     }
                     delete appointment.auditCheck;
                     markDirty();
