@@ -1120,7 +1120,7 @@
         <div class="header">
             <h1>
                 Client Data Organizer
-                <span class="version-badge">v1.0.27</span>
+                <span class="version-badge">v1.0.28</span>
             </h1>
             <div class="header-column-controls" aria-label="Column visibility controls">
                 <button id="columnToggleClients" class="column-visibility-pill is-shown" type="button" title="Hide Clients">Clients</button>
@@ -1317,6 +1317,31 @@
                 <textarea id="sessionInstructionsInput" style="border: 1px solid var(--input-border); border-radius: 6px; padding: 12px; width: 100%; background-color: var(--input-bg); color: var(--input-text); font-family: inherit; font-size: 14px; min-height: 110px; resize: vertical;" placeholder="Applies only to the selected appointment/session."></textarea>
                 <div style="font-size: 0.8rem; color: var(--text-color-secondary); margin-top: 4px;">
                     If Session Instructions conflict with Persistent Instructions, Session Instructions override for this note.
+                </div>
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <label for="preferredPronounsSelect" style="margin-bottom: 0.5rem; font-weight: 600; display: block;">Client Preferred Pronouns</label>
+                <select id="preferredPronounsSelect" style="border: 1px solid var(--input-border); border-radius: 6px; padding: 8px; width: 100%; background-color: var(--input-bg); color: var(--input-text);">
+                    <option value="">Select pronouns (optional)</option>
+                    <option value="he/him/his">he/him/his</option>
+                    <option value="she/hers">she/hers</option>
+                    <option value="they/them">they/them</option>
+                    <option value="custom">Custom</option>
+                </select>
+                <div id="customPronounsWrap" class="hidden" style="margin-top:8px; display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:8px;">
+                    <div>
+                        <label for="customPronounSubjectInput" style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:4px;">Subject Pronoun (e.g., he)</label>
+                        <input id="customPronounSubjectInput" type="text" class="setting-input" placeholder="he" disabled>
+                    </div>
+                    <div>
+                        <label for="customPronounObjectInput" style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:4px;">Object Pronoun (e.g., him)</label>
+                        <input id="customPronounObjectInput" type="text" class="setting-input" placeholder="him" disabled>
+                    </div>
+                    <div>
+                        <label for="customPronounPossessiveInput" style="font-size:0.85rem; font-weight:600; display:block; margin-bottom:4px;">Possessive Form (e.g., his)</label>
+                        <input id="customPronounPossessiveInput" type="text" class="setting-input" placeholder="his" disabled>
+                    </div>
                 </div>
             </div>
 
@@ -1951,6 +1976,11 @@
             const closeCustomInstructionsBtn = document.getElementById('closeCustomInstructionsBtn');
             const persistentInstructionsInput = document.getElementById('persistentInstructionsInput');
             const sessionInstructionsInput = document.getElementById('sessionInstructionsInput');
+            const preferredPronounsSelect = document.getElementById('preferredPronounsSelect');
+            const customPronounsWrapEl = document.getElementById('customPronounsWrap');
+            const customPronounSubjectInput = document.getElementById('customPronounSubjectInput');
+            const customPronounObjectInput = document.getElementById('customPronounObjectInput');
+            const customPronounPossessiveInput = document.getElementById('customPronounPossessiveInput');
             const saveCustomInstructionsBtn = document.getElementById('saveCustomInstructionsBtn');
             const clearCustomInstructionsBtn = document.getElementById('clearCustomInstructionsBtn');
             const customInstructionsModalitiesListEl = document.getElementById('customInstructionsModalitiesList');
@@ -2016,9 +2046,18 @@
             let sessionTimerInterval = null;
             let persistentInstructions = '';
             let sessionInstructions = '';
+            let preferredPronouns = '';
+            let customPronounSubject = '';
+            let customPronounObject = '';
+            let customPronounPossessive = '';
             let generatedGoalsDraft = [];
             let goalGeneratorModalities = [];
             let goalGeneratorModalityOther = '';
+            const PRONOUN_PRESETS = {
+                'he/him/his': { subject: 'he', object: 'him', possessive: 'his' },
+                'she/hers': { subject: 'she', object: 'her', possessive: 'hers' },
+                'they/them': { subject: 'they', object: 'them', possessive: 'their' }
+            };
             const isLikelyGoogleApiKey = (value) => /^AIza[0-9A-Za-z\-_]{20,}$/.test((value || '').trim());
             const getVertexAuthConfig = (credential) => {
                 const normalized = (credential || '').trim();
@@ -2176,6 +2215,18 @@
                     if (!Array.isArray(client.intakeSessions)) client.intakeSessions = [];
                     if (!Array.isArray(client.goals)) client.goals = [];
                     if (typeof client.persistentInstructions !== 'string') client.persistentInstructions = '';
+                    if (!client.preferredPronouns || typeof client.preferredPronouns !== 'object') {
+                        client.preferredPronouns = {
+                            value: '',
+                            subject: '',
+                            object: '',
+                            possessive: ''
+                        };
+                    }
+                    if (typeof client.preferredPronouns.value !== 'string') client.preferredPronouns.value = '';
+                    if (typeof client.preferredPronouns.subject !== 'string') client.preferredPronouns.subject = '';
+                    if (typeof client.preferredPronouns.object !== 'string') client.preferredPronouns.object = '';
+                    if (typeof client.preferredPronouns.possessive !== 'string') client.preferredPronouns.possessive = '';
                     client.goals.forEach(goal => {
                         if (!goal.timelineMonths) goal.timelineMonths = 12;
                         if (!Array.isArray(goal.objectives)) goal.objectives = [];
@@ -2510,11 +2561,40 @@
                 });
             };
 
+            const getClientPreferredPronouns = (client) => {
+                if (!client || !client.preferredPronouns || typeof client.preferredPronouns !== 'object') {
+                    return { value: '', subject: '', object: '', possessive: '' };
+                }
+                const value = (client.preferredPronouns.value || '').trim();
+                const subject = (client.preferredPronouns.subject || '').trim();
+                const object = (client.preferredPronouns.object || '').trim();
+                const possessive = (client.preferredPronouns.possessive || '').trim();
+                return { value, subject, object, possessive };
+            };
+
+            const getPreferredPronounsContext = (client) => {
+                const pronouns = getClientPreferredPronouns(client);
+                if (!pronouns.value) return '';
+
+                if (pronouns.value === 'custom') {
+                    if (!pronouns.subject || !pronouns.object || !pronouns.possessive) return '';
+                    return `\n- **Client Preferred Pronouns:** custom (subject: ${pronouns.subject}, object: ${pronouns.object}, possessive: ${pronouns.possessive})\n- **Pronoun Usage Rule:** Use these pronouns consistently when referring to Ct.`;
+                }
+
+                const preset = PRONOUN_PRESETS[pronouns.value];
+                if (!preset) return '';
+                return `\n- **Client Preferred Pronouns:** ${pronouns.value} (subject: ${preset.subject}, object: ${preset.object}, possessive: ${preset.possessive})\n- **Pronoun Usage Rule:** Use these pronouns consistently when referring to Ct.`;
+            };
+
             const getInstructionsContext = (client, appointment) => {
                 const persistent = (client?.persistentInstructions || '').trim();
                 const session = (appointment?.sessionInstructions || '').trim();
+                const pronounsContext = getPreferredPronounsContext(client);
 
                 let context = '';
+                if (pronounsContext) {
+                    context += pronounsContext;
+                }
                 if (persistent) {
                     context += `\n- **Persistent Instructions (Client-Level):**\n${persistent}`;
                 }
@@ -4498,6 +4578,14 @@ Requirements:
                 generateNoteBtn.disabled = !appointment || !hasAppointmentGenerationInput(appointment);
             };
 
+            const updatePronounCustomInputsState = () => {
+                const isCustom = preferredPronounsSelect.value === 'custom';
+                customPronounsWrapEl.classList.toggle('hidden', !isCustom);
+                customPronounSubjectInput.disabled = !isCustom;
+                customPronounObjectInput.disabled = !isCustom;
+                customPronounPossessiveInput.disabled = !isCustom;
+            };
+
             const saveSoapNote = (textarea) => {
                 const client = findClient(selectedClientId);
                 const appointment = findAppointment(client, selectedAppointmentId);
@@ -6351,9 +6439,19 @@ This error cannot be fixed within this application's code; it requires a configu
                 goalGeneratorModalityOther = clientLens.other || '';
                 persistentInstructions = client ? client.persistentInstructions || '' : '';
                 sessionInstructions = appointment ? appointment.sessionInstructions || '' : '';
+                const clientPronouns = getClientPreferredPronouns(client);
+                preferredPronouns = clientPronouns.value;
+                customPronounSubject = clientPronouns.subject;
+                customPronounObject = clientPronouns.object;
+                customPronounPossessive = clientPronouns.possessive;
                 customInstructionsModal.classList.remove('hidden');
                 persistentInstructionsInput.value = persistentInstructions;
                 sessionInstructionsInput.value = sessionInstructions;
+                preferredPronounsSelect.value = preferredPronouns;
+                customPronounSubjectInput.value = customPronounSubject;
+                customPronounObjectInput.value = customPronounObject;
+                customPronounPossessiveInput.value = customPronounPossessive;
+                updatePronounCustomInputsState();
                 sessionInstructionsInput.disabled = !appointment;
                 sessionInstructionsInput.placeholder = appointment
                     ? 'Applies only to the selected appointment/session.'
@@ -6367,14 +6465,45 @@ This error cannot be fixed within this application's code; it requires a configu
                     customInstructionsModal.classList.add('hidden');
                 }
             });
+            preferredPronounsSelect.addEventListener('change', () => {
+                updatePronounCustomInputsState();
+            });
             saveCustomInstructionsBtn.addEventListener('click', () => {
                 persistentInstructions = persistentInstructionsInput.value;
                 sessionInstructions = sessionInstructionsInput.value;
+                preferredPronouns = preferredPronounsSelect.value;
+                customPronounSubject = customPronounSubjectInput.value.trim();
+                customPronounObject = customPronounObjectInput.value.trim();
+                customPronounPossessive = customPronounPossessiveInput.value.trim();
+
+                if (preferredPronouns === 'custom') {
+                    const missing = [];
+                    if (!customPronounSubject) missing.push('subject pronoun');
+                    if (!customPronounObject) missing.push('object pronoun');
+                    if (!customPronounPossessive) missing.push('possessive form');
+                    if (missing.length > 0) {
+                        alert(`Custom pronouns require all three fields: subject, object, and possessive. Missing: ${missing.join(', ')}.`);
+                        const firstMissingInput = !customPronounSubject
+                            ? customPronounSubjectInput
+                            : !customPronounObject
+                                ? customPronounObjectInput
+                                : customPronounPossessiveInput;
+                        firstMissingInput.focus();
+                        return;
+                    }
+                }
+
                 customInstructionsModal.classList.add('hidden');
                 const client = findClient(selectedClientId);
                 const appointment = findAppointment(client, selectedAppointmentId);
                 if (client) {
                     client.persistentInstructions = persistentInstructions;
+                    client.preferredPronouns = {
+                        value: preferredPronouns,
+                        subject: preferredPronouns === 'custom' ? customPronounSubject : '',
+                        object: preferredPronouns === 'custom' ? customPronounObject : '',
+                        possessive: preferredPronouns === 'custom' ? customPronounPossessive : ''
+                    };
                 }
                 if (appointment) {
                     appointment.sessionInstructions = sessionInstructions;
@@ -6386,12 +6515,27 @@ This error cannot be fixed within this application's code; it requires a configu
             clearCustomInstructionsBtn.addEventListener('click', () => {
                 persistentInstructionsInput.value = '';
                 sessionInstructionsInput.value = '';
+                preferredPronounsSelect.value = '';
+                customPronounSubjectInput.value = '';
+                customPronounObjectInput.value = '';
+                customPronounPossessiveInput.value = '';
                 persistentInstructions = '';
                 sessionInstructions = '';
+                preferredPronouns = '';
+                customPronounSubject = '';
+                customPronounObject = '';
+                customPronounPossessive = '';
+                updatePronounCustomInputsState();
                 const client = findClient(selectedClientId);
                 const appointment = findAppointment(client, selectedAppointmentId);
                 if (client) {
                     client.persistentInstructions = '';
+                    client.preferredPronouns = {
+                        value: '',
+                        subject: '',
+                        object: '',
+                        possessive: ''
+                    };
                 }
                 if (appointment) {
                     delete appointment.sessionInstructions;
