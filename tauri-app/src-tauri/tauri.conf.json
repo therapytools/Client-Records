@@ -24,7 +24,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/therapytools/Client-Records/releases/latest/download/latest.json"
+        "https://github.com/nickhighland/Client-Records/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQxNkVFMDk4QjUyRjE1MTAKUldRUUZTKzFtT0J1MGJ0NGJYbHRCc1lzamZBc3JCejNSKzVvZjRmaXNoeUVyNXY3bEFhUGF0ZkMK"
     }
