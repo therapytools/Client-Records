@@ -137,7 +137,6 @@
                 color: var(--text-color-inverted);
             }
         }
-        }
         
         .header h1 {
             font-size: 1.5rem;
@@ -1460,6 +1459,7 @@
             font-weight: 700;
         }
 
+        @media (max-width: 900px) {
             #cssrsModal .risk-indicator {
                 flex-direction: column;
                 align-items: flex-start;
@@ -1905,7 +1905,7 @@
         <div class="header">
             <h1>
                 Client Data Organizer
-                <span class="version-badge">v1.0.32</span>
+                <span class="version-badge">v1.0.33</span>
             </h1>
             <div class="header-column-controls" aria-label="Column visibility controls">
                 <button id="columnToggleClients" class="column-visibility-pill is-shown" type="button" title="Hide Clients">Clients</button>
@@ -3462,8 +3462,38 @@
                 })
                 .map(entry => entry.item);
 
-            const alignSoapSectionsByObjectiveOrder = (soap) => {
+            const SOAP_SORT_SECTION_KEYS = ['o', 's', 'a', 'p'];
+
+            const ensureSoapSectionOrderOverrides = (soap) => {
+                if (!soap || typeof soap !== 'object') return { s: false, o: false, a: false, p: false };
+                if (!soap.sectionOrderManualOverride || typeof soap.sectionOrderManualOverride !== 'object') {
+                    soap.sectionOrderManualOverride = {};
+                }
+                SOAP_SORT_SECTION_KEYS.forEach(key => {
+                    if (typeof soap.sectionOrderManualOverride[key] !== 'boolean') {
+                        soap.sectionOrderManualOverride[key] = false;
+                    }
+                });
+                return soap.sectionOrderManualOverride;
+            };
+
+            const setSoapSectionOrderOverride = (soap, sectionKey, isOverridden = true) => {
+                const overrides = ensureSoapSectionOrderOverrides(soap);
+                if (Object.prototype.hasOwnProperty.call(overrides, sectionKey)) {
+                    overrides[sectionKey] = !!isOverridden;
+                }
+            };
+
+            const isSoapSectionOrderOverridden = (soap, sectionKey) => {
+                const overrides = ensureSoapSectionOrderOverrides(soap);
+                return !!overrides[sectionKey];
+            };
+
+            const alignSoapSectionsByObjectiveOrder = (soap, options = {}) => {
                 if (!soap || typeof soap !== 'object') return;
+                const skipSections = options.skipSections instanceof Set
+                    ? options.skipSections
+                    : new Set(Array.isArray(options.skipSections) ? options.skipSections : []);
 
                 const objectiveTextItems = splitSoapBulletItems(soap.o || '');
                 const objectiveSuggestionItems = Array.isArray(soap.o_suggestion)
@@ -3475,7 +3505,9 @@
                 const { topics } = buildObjectiveTopicClusters(objectiveSeedItems);
                 if (topics.length === 0) return;
 
-                ['o', 's', 'a', 'p'].forEach(sectionKey => {
+                SOAP_SORT_SECTION_KEYS.forEach(sectionKey => {
+                    if (skipSections.has(sectionKey)) return;
+
                     const sectionItems = splitSoapBulletItems(soap[sectionKey] || '');
                     if (sectionItems.length > 0) {
                         const sortedSectionItems = sortByTopicOrderStable(sectionItems, item => item, topics);
@@ -3582,6 +3614,22 @@
                     const overlap = itemTokens.filter(token => objectiveTokenSet.has(token)).length;
                     const coverage = overlap / itemTokens.length;
                     return overlap > 0 && (coverage >= 1 || coverage >= 0.66);
+                });
+            };
+
+            const refreshObjectiveSuggestionInterventionMatches = (appointment) => {
+                if (!appointment?.soap) return;
+                const objectiveSuggestions = Array.isArray(appointment.soap.o_suggestion)
+                    ? appointment.soap.o_suggestion
+                    : [];
+                appointment.soap.o_suggestion_intervention_matches = objectiveSuggestions.map(suggestion => {
+                    if (typeof suggestion === 'object' && suggestion && suggestion.suggested) {
+                        return extractInterventionsFromObjective(suggestion.suggested);
+                    }
+                    if (typeof suggestion === 'string') {
+                        return extractInterventionsFromObjective(suggestion);
+                    }
+                    return [];
                 });
             };
 
@@ -5528,7 +5576,7 @@ Requirements:
                 }
 
                 // Save changes using the provided callback
-                saveDataCallback(textarea);
+                saveDataCallback(textarea, true);
             };
             
             const handleBulletedKeyDown = (e) => {
@@ -5604,7 +5652,7 @@ Requirements:
                 generateNoteBtn.disabled = !appointment || !hasAppointmentGenerationInput(appointment);
             };
 
-            const saveSoapNote = (textarea) => {
+            const saveSoapNote = (textarea, isManualEdit = true) => {
                 const client = findClient(selectedClientId);
                 const appointment = findAppointment(client, selectedAppointmentId);
                 if (appointment) {
@@ -5615,6 +5663,9 @@ Requirements:
                     } else {
                         const key = textarea.id.slice(-1).toLowerCase();
                         appointment.soap[key] = textarea.value;
+                        if (SOAP_SORT_SECTION_KEYS.includes(key) && isManualEdit) {
+                            setSoapSectionOrderOverride(appointment.soap, key, true);
+                        }
                         // NEW: If the Objective text (manual or AI) directly names any intervention
                         // from the intervention bank, add those to the interventions list.
                         if (key === 'o') {
@@ -5791,6 +5842,7 @@ Requirements:
                 const suggestionKey = `${type}_suggestion`;
                 const suggestionData = appointment.soap[suggestionKey]?.[index];
                 if (!suggestionData) return;
+                const sectionKey = type.toLowerCase();
 
                 const textarea = document.getElementById(`soap${type.toUpperCase()}`);
                 const isReplacement = typeof suggestionData === 'object' && suggestionData.original && suggestionData.suggested;
@@ -5826,11 +5878,10 @@ Requirements:
                     }
                     
                     // Manually update the data model since we're not dispatching the 'input' event before re-rendering
-                    const key = textarea.id.slice(-1).toLowerCase();
-                    appointment.soap[key] = textarea.value;
+                    appointment.soap[sectionKey] = textarea.value;
                     // If this was an Objective suggestion that was accepted, extract matching
                     // interventions from the Objective text and populate the interventions field.
-                    if (key === 'o' && isAccepted && !skipAppend) {
+                    if (sectionKey === 'o' && isAccepted && !skipAppend) {
                         const suggestionMatches = Array.isArray(appointment.soap.o_suggestion_intervention_matches)
                             ? (appointment.soap.o_suggestion_intervention_matches[index] || [])
                             : [];
@@ -5851,9 +5902,15 @@ Requirements:
                 if (Array.isArray(appointment.soap[suggestionKey])) {
                     appointment.soap[suggestionKey].splice(index, 1);
                 }
-                if (type === 'o' && Array.isArray(appointment.soap.o_suggestion_intervention_matches)) {
-                    appointment.soap.o_suggestion_intervention_matches.splice(index, 1);
+
+                if (isAccepted && textToAdd && !skipAppend && SOAP_SORT_SECTION_KEYS.includes(sectionKey)) {
+                    const overrides = ensureSoapSectionOrderOverrides(appointment.soap);
+                    const skipSections = new Set(SOAP_SORT_SECTION_KEYS.filter(key => overrides[key]));
+                    if (!isSoapSectionOrderOverridden(appointment.soap, sectionKey)) {
+                        alignSoapSectionsByObjectiveOrder(appointment.soap, { skipSections });
+                    }
                 }
+                refreshObjectiveSuggestionInterventionMatches(appointment);
                 
                 markDirty();
                 renderSoap(); 
@@ -5945,6 +6002,9 @@ Analyze the "Session Information" text provided by the user. Categorize every pi
                   const auditProofing = getAuditProofingData(appointment);
                   const generatedObjectiveText = soapData.o ? formatBulletPoints(soapData.o) : '';
 
+                  ensureSoapSectionOrderOverrides(appointment.soap);
+                  SOAP_SORT_SECTION_KEYS.forEach(sectionKey => setSoapSectionOrderOverride(appointment.soap, sectionKey, false));
+
                  ['s', 'o', 'a', 'p'].forEach(key => {
                      const suggestionKey = `${key}_suggestion`;
                      const suggestions = soapData[suggestionKey] || [];
@@ -5996,18 +6056,7 @@ Analyze the "Session Information" text provided by the user. Categorize every pi
 
                  alignSoapSectionsByObjectiveOrder(appointment.soap);
 
-                 const objectiveSuggestions = Array.isArray(appointment.soap.o_suggestion)
-                     ? appointment.soap.o_suggestion
-                     : [];
-                 appointment.soap.o_suggestion_intervention_matches = objectiveSuggestions.map(suggestion => {
-                     if (typeof suggestion === 'object' && suggestion && suggestion.suggested) {
-                         return extractInterventionsFromObjective(suggestion.suggested);
-                     }
-                     if (typeof suggestion === 'string') {
-                         return extractInterventionsFromObjective(suggestion);
-                     }
-                     return [];
-                 });
+                 refreshObjectiveSuggestionInterventionMatches(appointment);
 
                       const selectedFromObjective = extractInterventionsFromObjective(generatedObjectiveText);
                       const mergedInterventions = mergeInterventions(appointment.selectedInterventions, selectedFromObjective);
