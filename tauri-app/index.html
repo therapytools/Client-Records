@@ -3355,6 +3355,12 @@
                 'not', 'no', 'yes', 'per', 'then', 'than', 'also', 'about', 'related'
             ]);
 
+            const soapTopicWeakAnchorTokens = new Set([
+                'coping', 'skill', 'technique', 'treatment', 'therapeutic', 'manage',
+                'management', 'progress', 'support', 'response', 'discuss', 'explore',
+                'practice', 'practic', 'address', 'identify', 'strategi', 'strategy'
+            ]);
+
             const splitSoapBulletItems = (value) => String(value || '')
                 .split(/\n+/)
                 .map(line => line.trim())
@@ -3367,6 +3373,64 @@
                 .filter(Boolean)
                 .map(item => `• ${item}`)
                 .join('\n');
+
+            const stripSentenceEndingPunctuation = (text) => String(text || '').replace(/[.!?]+$/, '').trim();
+
+            const ensureSentenceEndingPunctuation = (text) => {
+                const trimmed = String(text || '').trim();
+                if (!trimmed) return '';
+                return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+            };
+
+            const lowercaseFirstCharacter = (text) => {
+                const trimmed = String(text || '').trim();
+                if (!trimmed) return '';
+                return `${trimmed.charAt(0).toLowerCase()}${trimmed.slice(1)}`;
+            };
+
+            const ensureObjectiveCollaborationLine = (line) => {
+                const cleaned = String(line || '').replace(/^•\s*/, '').trim();
+                if (!cleaned) return '';
+                const hasWriter = /\bwriter\b/i.test(cleaned);
+                const hasCt = /\bct\b/i.test(cleaned);
+                if (hasWriter && hasCt) return cleaned;
+
+                if (hasWriter && !hasCt) {
+                    return ensureSentenceEndingPunctuation(`${stripSentenceEndingPunctuation(cleaned)} with Ct participation`);
+                }
+
+                if (!hasWriter && hasCt) {
+                    return ensureSentenceEndingPunctuation(`Writer engaged Ct in this intervention; ${stripSentenceEndingPunctuation(cleaned)}`);
+                }
+
+                return ensureSentenceEndingPunctuation(`Writer engaged Ct in ${lowercaseFirstCharacter(stripSentenceEndingPunctuation(cleaned))}`);
+            };
+
+            const enforceObjectiveSectionCollaboration = (sectionText) => {
+                const objectiveItems = splitSoapBulletItems(sectionText);
+                if (objectiveItems.length === 0) return sectionText || '';
+                return joinSoapBulletItems(objectiveItems.map(ensureObjectiveCollaborationLine));
+            };
+
+            const enforceObjectiveSuggestionCollaboration = (suggestions) => {
+                if (!Array.isArray(suggestions)) return [];
+                return suggestions.map(suggestion => {
+                    if (typeof suggestion === 'string') {
+                        return ensureObjectiveCollaborationLine(suggestion);
+                    }
+                    if (suggestion && typeof suggestion === 'object') {
+                        const normalizedSuggestion = { ...suggestion };
+                        if (normalizedSuggestion.original) {
+                            normalizedSuggestion.original = ensureObjectiveCollaborationLine(normalizedSuggestion.original);
+                        }
+                        if (normalizedSuggestion.suggested) {
+                            normalizedSuggestion.suggested = ensureObjectiveCollaborationLine(normalizedSuggestion.suggested);
+                        }
+                        return normalizedSuggestion;
+                    }
+                    return suggestion;
+                });
+            };
 
             const tokenizeForSoapTopic = (value) => normalizeInterventionText(value)
                 .split(' ')
@@ -3389,38 +3453,72 @@
                 return { overlap, score };
             };
 
+            const hasStrongSingleTopicAnchor = (tokenSet, topicTokenSet) => {
+                if (!tokenSet || !topicTokenSet || tokenSet.size === 0 || topicTokenSet.size === 0) return false;
+                const sharedTokens = [...tokenSet].filter(token => topicTokenSet.has(token));
+                return sharedTokens.some(token => token.length >= 5 && !soapTopicWeakAnchorTokens.has(token));
+            };
+
             const buildObjectiveTopicClusters = (objectiveItems) => {
-                const topics = [];
-                const assignments = [];
+                const tokenSets = (objectiveItems || []).map(item => new Set(tokenizeForSoapTopic(item)));
+                const parent = tokenSets.map((_, index) => index);
 
-                (objectiveItems || []).forEach(item => {
-                    const tokens = new Set(tokenizeForSoapTopic(item));
-                    if (tokens.size === 0) {
-                        assignments.push(Number.POSITIVE_INFINITY);
-                        return;
+                const find = (index) => {
+                    if (parent[index] !== index) {
+                        parent[index] = find(parent[index]);
                     }
+                    return parent[index];
+                };
 
-                    let bestTopicIndex = -1;
-                    let bestOverlap = 0;
-                    let bestScore = 0;
+                const union = (left, right) => {
+                    const leftRoot = find(left);
+                    const rightRoot = find(right);
+                    if (leftRoot === rightRoot) return;
+                    parent[rightRoot] = leftRoot;
+                };
 
-                    topics.forEach((topic, index) => {
-                        const { overlap, score } = scoreTopicOverlap(tokens, topic.tokens);
-                        if (score > bestScore || (score === bestScore && overlap > bestOverlap)) {
-                            bestTopicIndex = index;
-                            bestOverlap = overlap;
-                            bestScore = score;
+                // Build topic clusters from pairwise similarity so grouping is not dependent on approval order.
+                for (let i = 0; i < tokenSets.length; i += 1) {
+                    if (tokenSets[i].size === 0) continue;
+                    for (let j = i + 1; j < tokenSets.length; j += 1) {
+                        if (tokenSets[j].size === 0) continue;
+                        const { overlap, score } = scoreTopicOverlap(tokenSets[i], tokenSets[j]);
+                        const strongAnchorMatch = hasStrongSingleTopicAnchor(tokenSets[i], tokenSets[j]);
+                        if (overlap >= 2 || score >= 0.6 || strongAnchorMatch) {
+                            union(i, j);
                         }
-                    });
-
-                    const shouldAttachToExisting = bestTopicIndex !== -1 && (bestOverlap >= 2 || bestScore >= 0.6);
-                    if (shouldAttachToExisting) {
-                        tokens.forEach(token => topics[bestTopicIndex].tokens.add(token));
-                        assignments.push(bestTopicIndex);
-                    } else {
-                        topics.push({ tokens: new Set(tokens) });
-                        assignments.push(topics.length - 1);
                     }
+                }
+
+                const clusterMetaByRoot = new Map();
+                tokenSets.forEach((tokens, index) => {
+                    if (tokens.size === 0) return;
+                    const root = find(index);
+                    if (!clusterMetaByRoot.has(root)) {
+                        clusterMetaByRoot.set(root, {
+                            firstIndex: index,
+                            tokens: new Set()
+                        });
+                    }
+                    const cluster = clusterMetaByRoot.get(root);
+                    cluster.firstIndex = Math.min(cluster.firstIndex, index);
+                    tokens.forEach(token => cluster.tokens.add(token));
+                });
+
+                const orderedRoots = [...clusterMetaByRoot.entries()]
+                    .sort((a, b) => a[1].firstIndex - b[1].firstIndex)
+                    .map(([root]) => root);
+                const rootToTopicIndex = new Map(orderedRoots.map((root, topicIndex) => [root, topicIndex]));
+
+                const topics = orderedRoots.map(root => ({
+                    tokens: new Set(clusterMetaByRoot.get(root).tokens)
+                }));
+
+                const assignments = tokenSets.map((tokens, index) => {
+                    if (tokens.size === 0) return Number.POSITIVE_INFINITY;
+                    const root = find(index);
+                    const topicIndex = rootToTopicIndex.get(root);
+                    return Number.isInteger(topicIndex) ? topicIndex : Number.POSITIVE_INFINITY;
                 });
 
                 return { topics, assignments };
@@ -3446,7 +3544,8 @@
                 });
 
                 if (bestTopicIndex === -1) return Number.POSITIVE_INFINITY;
-                if (bestOverlap >= 2 || bestScore >= 0.4) return bestTopicIndex;
+                const strongAnchorMatch = hasStrongSingleTopicAnchor(tokens, topics[bestTopicIndex].tokens);
+                if (bestOverlap >= 2 || bestScore >= 0.4 || (bestOverlap >= 1 && strongAnchorMatch)) return bestTopicIndex;
                 return Number.POSITIVE_INFINITY;
             };
 
@@ -3456,6 +3555,21 @@
                     originalIndex,
                     topicRank: getTopicRankForText(getTopicText(item), topics)
                 }))
+                .sort((a, b) => {
+                    if (a.topicRank === b.topicRank) return a.originalIndex - b.originalIndex;
+                    return a.topicRank - b.topicRank;
+                })
+                .map(entry => entry.item);
+
+            const sortByExplicitTopicRanksStable = (items, explicitTopicRanks = []) => (items || [])
+                .map((item, originalIndex) => {
+                    const explicitRank = explicitTopicRanks[originalIndex];
+                    return {
+                        item,
+                        originalIndex,
+                        topicRank: Number.isFinite(explicitRank) ? explicitRank : Number.POSITIVE_INFINITY
+                    };
+                })
                 .sort((a, b) => {
                     if (a.topicRank === b.topicRank) return a.originalIndex - b.originalIndex;
                     return a.topicRank - b.topicRank;
@@ -3502,25 +3616,32 @@
                 const objectiveSeedItems = [...objectiveTextItems, ...objectiveSuggestionItems];
                 if (objectiveSeedItems.length === 0) return;
 
-                const { topics } = buildObjectiveTopicClusters(objectiveSeedItems);
+                const { topics, assignments } = buildObjectiveTopicClusters(objectiveSeedItems);
                 if (topics.length === 0) return;
+
+                const objectiveTextTopicRanks = assignments.slice(0, objectiveTextItems.length);
+                const objectiveSuggestionTopicRanks = assignments.slice(objectiveTextItems.length);
 
                 SOAP_SORT_SECTION_KEYS.forEach(sectionKey => {
                     if (skipSections.has(sectionKey)) return;
 
                     const sectionItems = splitSoapBulletItems(soap[sectionKey] || '');
                     if (sectionItems.length > 0) {
-                        const sortedSectionItems = sortByTopicOrderStable(sectionItems, item => item, topics);
+                        const sortedSectionItems = sectionKey === 'o'
+                            ? sortByExplicitTopicRanksStable(sectionItems, objectiveTextTopicRanks)
+                            : sortByTopicOrderStable(sectionItems, item => item, topics);
                         soap[sectionKey] = joinSoapBulletItems(sortedSectionItems);
                     }
 
                     const suggestionKey = `${sectionKey}_suggestion`;
                     if (Array.isArray(soap[suggestionKey]) && soap[suggestionKey].length > 0) {
-                        soap[suggestionKey] = sortByTopicOrderStable(
-                            soap[suggestionKey],
-                            suggestion => getTopicTextFromSuggestion(suggestion),
-                            topics
-                        );
+                        soap[suggestionKey] = sectionKey === 'o'
+                            ? sortByExplicitTopicRanksStable(soap[suggestionKey], objectiveSuggestionTopicRanks)
+                            : sortByTopicOrderStable(
+                                soap[suggestionKey],
+                                suggestion => getTopicTextFromSuggestion(suggestion),
+                                topics
+                            );
                     }
                 });
             };
@@ -5867,6 +5988,9 @@ Requirements:
                 }
 
                 if (textToAdd) {
+                    if (sectionKey === 'o') {
+                        textToAdd = ensureObjectiveCollaborationLine(textToAdd);
+                    }
                     const currentText = textarea.value.trim();
                     // Ensure the text to add is a proper bullet point.
                     const newText = `• ${textToAdd.replace(/^•\s*/, '')}`;
@@ -5931,6 +6055,7 @@ Analyze the "Session Information" text provided by the user. Categorize every pi
 - **Objective (O):** Everything that *happens* in the therapy session. This includes all therapeutic interventions, actions taken, connections made, and reflections or psychoeducation provided by the writer. **Any sentence that describes the writer's actions or speech belongs here.** 
   - **CRITICAL:** Each bullet point should be self-sufficient, without relying on other bullet points for context. It should convey a complete thought.
   - **CRITICAL:** Objective content must contain an intervention connected to session content. Do not include observations without corresponding actions or therapeutic moves.
+    - **CRITICAL COLLABORATION RULE:** Every Objective bullet MUST explicitly include both "Writer" and "Ct" in the same bullet. Writer should be implementing the intervention with Ct participation (not Writer acting alone and not Ct acting alone).
   - **GOLDEN THREAD:** When treatment goals are provided, weave connections between interventions and specific treatment goals/objectives in this section. For example: "Writer provided CBT techniques to address client's anxiety management goal" or "Explored coping strategies related to client's objective of improving emotional regulation." Only make these connections when they are clearly apparent from the session content - don't force connections that aren't naturally there.
     - **REQUIRED WHEN PROVIDED:** If interventions are pre-selected from the Intervention Bank and there is an active objective match, include explicit linkage phrasing such as: "Writer [intervention], addressing treatment plan objective of [objective]."
 
@@ -6000,15 +6125,20 @@ Analyze the "Session Information" text provided by the user. Categorize every pi
                  if (!appointment.soap) appointment.soap = {};
                   delete appointment.auditCheck;
                   const auditProofing = getAuditProofingData(appointment);
-                  const generatedObjectiveText = soapData.o ? formatBulletPoints(soapData.o) : '';
+                const generatedObjectiveText = soapData.o ? enforceObjectiveSectionCollaboration(formatBulletPoints(soapData.o)) : '';
 
                   ensureSoapSectionOrderOverrides(appointment.soap);
                   SOAP_SORT_SECTION_KEYS.forEach(sectionKey => setSoapSectionOrderOverride(appointment.soap, sectionKey, false));
 
                  ['s', 'o', 'a', 'p'].forEach(key => {
                      const suggestionKey = `${key}_suggestion`;
-                     const suggestions = soapData[suggestionKey] || [];
-                     const fullText = soapData[key] ? formatBulletPoints(soapData[key]) : '';
+                     let suggestions = soapData[suggestionKey] || [];
+                     let fullText = soapData[key] ? formatBulletPoints(soapData[key]) : '';
+
+                     if (key === 'o') {
+                         fullText = enforceObjectiveSectionCollaboration(fullText);
+                         suggestions = enforceObjectiveSuggestionCollaboration(suggestions);
+                     }
 
                      // FIXED: Only add content that's NOT part of suggestions
                      // All suggestion content (both replacements and new additions) should be presented for user approval
