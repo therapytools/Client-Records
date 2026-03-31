@@ -1918,7 +1918,7 @@
         <div class="header">
             <h1>
                 Client Data Organizer
-                <span class="version-badge">v1.0.34</span>
+                <span class="version-badge">v1.0.36</span>
             </h1>
             <div class="header-column-controls" aria-label="Column visibility controls">
                 <button id="columnToggleClients" class="column-visibility-pill is-shown" type="button" title="Hide Clients">Clients</button>
@@ -8949,6 +8949,22 @@ This error cannot be fixed within this application's code; it requires a configu
             inactivityTimer = setTimeout(startCountdown, getInactivityLimit());
         }
 
+        function isAppUnlocked() {
+            const appContainer = document.getElementById('appContainer');
+            return !!appContainer && window.getComputedStyle(appContainer).display !== 'none';
+        }
+
+        let lastActivityResetAt = 0;
+        function handleInactivityResetOnActivity() {
+            if (!isAppUnlocked()) return;
+
+            const now = Date.now();
+            if (now - lastActivityResetAt < 250) return;
+
+            lastActivityResetAt = now;
+            resetInactivityTimer();
+        }
+
         function lockApp() {
             stopCountdown();
             clearTimeout(inactivityTimer);
@@ -9438,13 +9454,18 @@ This error cannot be fixed within this application's code; it requires a configu
         scheduleStartupUpdateCheck();
         startRecurringUpdateChecks();
 
-        // Reset timer on user activity
-        ['mousemove', 'keydown', 'scroll', 'click'].forEach(event => {
-            document.addEventListener(event, () => {
-                if (document.getElementById('appContainer').style.display === 'flex') {
+        const autolockSelect = document.getElementById('autolockSelect');
+        if (autolockSelect) {
+            autolockSelect.addEventListener('change', () => {
+                if (isAppUnlocked()) {
                     resetInactivityTimer();
                 }
             });
+        }
+
+        // Reset timer on any app activity; capture phase avoids missing events that stop bubbling.
+        ['mousemove', 'mousedown', 'keydown', 'scroll', 'click', 'pointerdown', 'pointermove', 'touchstart', 'wheel', 'input'].forEach((eventName) => {
+            document.addEventListener(eventName, handleInactivityResetOnActivity, true);
         });
 
     </script>
