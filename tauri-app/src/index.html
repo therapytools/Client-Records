@@ -1918,7 +1918,7 @@
         <div class="header">
             <h1>
                 Client Data Organizer
-                <span class="version-badge">v1.0.36</span>
+                <span class="version-badge">v1.0.37</span>
             </h1>
             <div class="header-column-controls" aria-label="Column visibility controls">
                 <button id="columnToggleClients" class="column-visibility-pill is-shown" type="button" title="Hide Clients">Clients</button>
@@ -8102,7 +8102,10 @@ This error cannot be fixed within this application's code; it requires a configu
                             setUpdateAsteriskVisibility(true);
                         }
                         if (promptIfAvailable) {
-                            await promptAndInstallUpdate(update);
+                            const acceptedUpdate = await promptAndInstallUpdate(update);
+                            if (!acceptedUpdate) {
+                                setUpdateAsteriskVisibility(true);
+                            }
                         }
                         return update;
                     }
@@ -8829,6 +8832,8 @@ This error cannot be fixed within this application's code; it requires a configu
             makeResizable(document.getElementById('resizer2'), document.getElementById('panelAppointments'), document.getElementById('panelSession'));
             makeResizable(document.getElementById('resizer3'), document.getElementById('panelSession'), document.getElementById('panelSoap'));
             makeResizable(document.getElementById('resizer-session-notes'), document.getElementById('sessionInfoWrapper'), document.getElementById('notesWrapper'), 'y');
+            scheduleStartupUpdateCheck();
+            startRecurringUpdateChecks();
 
             window.__appAuthHooks = {
                 loadDataFromLocalStorage,
@@ -9451,8 +9456,6 @@ This error cannot be fixed within this application's code; it requires a configu
 
         // Initialize login screen
         initLoginScreen();
-        scheduleStartupUpdateCheck();
-        startRecurringUpdateChecks();
 
         const autolockSelect = document.getElementById('autolockSelect');
         if (autolockSelect) {
